@@ -128,7 +128,7 @@ def get_daily_quota_usage():
     conn = get_connection()
     cursor = conn.cursor()
     # นับจำนวนครั้งที่ใช้งานภายในวันนี้
-    cursor.execute("SELECT COUNT(*) FROM api_logs WHERE date(created_at, 'localtime') = date('now', 'localtime')")
+    cursor.execute("SELECT COUNT(*) FROM api_logs WHERE DATE(created_at) = CURDATE()")
     used = cursor.fetchone()[0]
     conn.close()
     return used
@@ -210,7 +210,7 @@ def get_learning_history(user_id: int):
     cursor = conn.cursor()
     cursor.execute('''
         SELECT 
-            date(created_at, 'localtime') as play_date, 
+            DATE(created_at) as play_date, 
             strftime('%H:00', created_at, 'localtime') as play_hour, 
             COUNT(id) as interactions, 
             AVG(score) as avg_score,
@@ -240,7 +240,7 @@ def reset_today_progress(user_id: int):
     cursor = conn.cursor()
     cursor.execute('''
         DELETE FROM progress 
-        WHERE user_id = %s AND date(created_at, 'localtime') = date('now', 'localtime')
+        WHERE user_id = %s AND DATE(created_at) = CURDATE()
     ''', (user_id,))
     conn.commit()
     conn.close()
@@ -256,7 +256,7 @@ def get_today_dashboard(user_id: int):
             SUM(CASE WHEN stars LIKE '%⭐%' THEN length(stars) ELSE 0 END),
             SUM(CASE WHEN topic LIKE 'Game_%' THEN 1 ELSE 0 END)
         FROM progress 
-        WHERE user_id = %s AND date(created_at, 'localtime') = date('now', 'localtime')
+        WHERE user_id = %s AND DATE(created_at) = CURDATE()
     ''', (user_id,))
     row = cursor.fetchone()
     conn.close()
