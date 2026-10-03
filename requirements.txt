@@ -14,3 +14,4 @@ groq
 httpx
 openai-whisper
 pymysql
+edge-tts

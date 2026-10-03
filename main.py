@@ -1,3 +1,4 @@
+from fastapi.responses import StreamingResponse
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
@@ -656,3 +657,31 @@ def admin_generate_invite():
 @app.get("/api/v1/vocabulary/{user_id}")
 def get_vocabulary(user_id: int):
     return {"status": "success", "vocabulary": database.get_user_vocabulary(user_id)}
+
+
+import edge_tts
+
+VOICE_MAP = {
+    'daddy': 'en-US-GuyNeural',
+    'mommy': 'en-US-AriaNeural',
+    'brother': 'en-US-ChristopherNeural',
+    'sister': 'en-US-MichelleNeural',
+    'pun': 'en-US-EricNeural',
+    'party': 'en-US-AnaNeural',
+    'pokpong': 'en-US-RogerNeural',
+    'yenlly': 'en-US-JennyNeural',
+    'ko': 'en-US-SteffanNeural'
+}
+
+@app.get("/api/v1/tts")
+async def get_tts(text: str, coachId: str = 'mommy'):
+    voice = VOICE_MAP.get(coachId, 'en-US-AriaNeural')
+    communicate = edge_tts.Communicate(text, voice)
+    
+    async def iterfile():
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                yield chunk["data"]
+
+    return StreamingResponse(iterfile(), media_type="audio/mpeg")
+
