@@ -31,7 +31,7 @@ def init_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTO_INCREMENT,
-            name TEXT UNIQUE NOT NULL,
+            name VARCHAR(255) UNIQUE NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -60,7 +60,7 @@ def init_db():
     # ตารางเก็บการตั้งค่าของระบบ (เช่น Quota)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
+            key VARCHAR(255) PRIMARY KEY,
             value TEXT
         )
     ''')
@@ -68,7 +68,7 @@ def init_db():
     # ตารางโปรไฟล์เสริม (เงินออม, สตรีค)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS user_profiles (
-            user_id TEXT PRIMARY KEY,
+            user_id VARCHAR(255) PRIMARY KEY,
             wallet_balance INTEGER DEFAULT 0,
             current_streak INTEGER DEFAULT 0,
             last_played_date TEXT,
@@ -82,7 +82,7 @@ def init_db():
             user_id TEXT NOT NULL,
             amount INTEGER NOT NULL,
             reason TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT (datetime('now', 'localtime'))
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     
@@ -101,7 +101,7 @@ def get_setting(key: str, default_val: str):
 def update_setting(key: str, value: str):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (%s, %s)", (key, value))
+    cursor.execute("REPLACE INTO settings (key, value) VALUES (%s, %s)", (key, value))
     conn.commit()
     conn.close()
 
@@ -459,7 +459,7 @@ def _init_invite_table():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS invite_tokens (
             id INTEGER PRIMARY KEY AUTO_INCREMENT,
-            code TEXT UNIQUE,
+            code VARCHAR(255) UNIQUE,
             is_used INTEGER DEFAULT 0,
             used_by TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -519,7 +519,7 @@ def _init_vocab_table():
         CREATE TABLE IF NOT EXISTS user_vocabulary (
             id INTEGER PRIMARY KEY AUTO_INCREMENT,
             user_id INTEGER,
-            word TEXT,
+            word VARCHAR(255),
             part_of_speech TEXT,
             meaning TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
