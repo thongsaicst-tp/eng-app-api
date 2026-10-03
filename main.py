@@ -662,21 +662,21 @@ def get_vocabulary(user_id: int):
 import edge_tts
 
 VOICE_MAP = {
-    'daddy': 'en-US-GuyNeural',
-    'mommy': 'en-US-AriaNeural',
-    'brother': 'en-US-ChristopherNeural',
-    'sister': 'en-US-MichelleNeural',
-    'pun': 'en-US-EricNeural',
-    'party': 'en-US-AnaNeural',
-    'pokpong': 'en-US-RogerNeural',
-    'yenlly': 'en-US-JennyNeural',
-    'ko': 'en-US-SteffanNeural'
+    'daddy': {'voice': 'en-US-GuyNeural', 'pitch': '+0Hz', 'rate': '+0%'},
+    'mommy': {'voice': 'en-US-AriaNeural', 'pitch': '+0Hz', 'rate': '+0%'},
+    'brother': {'voice': 'en-US-ChristopherNeural', 'pitch': '+5Hz', 'rate': '+5%'},
+    'sister': {'voice': 'en-US-AvaNeural', 'pitch': '+15Hz', 'rate': '+5%'}, # Seen (12yo girl)
+    'pun': {'voice': 'en-US-AndrewNeural', 'pitch': '+35Hz', 'rate': '+10%'}, # Poon (12yo boy)
+    'party': {'voice': 'en-US-AnaNeural', 'pitch': '+10Hz', 'rate': '+5%'}, # Party (8yo girl)
+    'pokpong': {'voice': 'en-US-BrianNeural', 'pitch': '+35Hz', 'rate': '+10%'}, # Pokpong (12yo boy)
+    'yenlly': {'voice': 'en-US-JennyNeural', 'pitch': '+0Hz', 'rate': '+0%'},
+    'ko': {'voice': 'en-US-SteffanNeural', 'pitch': '+0Hz', 'rate': '+0%'}
 }
 
 @app.get("/api/v1/tts")
 async def get_tts(text: str, coachId: str = 'mommy'):
-    voice = VOICE_MAP.get(coachId, 'en-US-AriaNeural')
-    communicate = edge_tts.Communicate(text, voice)
+    profile = VOICE_MAP.get(coachId, {'voice': 'en-US-AriaNeural', 'pitch': '+0Hz', 'rate': '+0%'})
+    communicate = edge_tts.Communicate(text, profile['voice'], pitch=profile['pitch'], rate=profile['rate'])
     
     async def iterfile():
         async for chunk in communicate.stream():
