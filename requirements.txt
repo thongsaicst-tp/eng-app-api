@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+python-multipart
+python-dotenv
+sqlalchemy
+
+# Provider 1: Gemini
+google-genai
+
+# Provider 2: Groq (Whisper STT + Llama LLM)
+groq
+
+# Provider 3: Ollama (local) - ใช้ httpx (มีอยู่แล้ว) + openai-whisper สำหรับ STT
+httpx
+openai-whisper
