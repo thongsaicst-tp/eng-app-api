@@ -64,18 +64,26 @@ def init_db():
         )
     """)
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS settings (
-            setting_key VARCHAR(255) PRIMARY KEY,
-            setting_value TEXT
-        )
-    """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS api_logs (
-            id INTEGER PRIMARY KEY AUTO_INCREMENT,
-            called_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
+    try:
+        cursor.execute("SELECT setting_value FROM settings LIMIT 1")
+    except Exception:
+        cursor.execute("DROP TABLE IF EXISTS settings")
+        cursor.execute("""
+            CREATE TABLE settings (
+                setting_key VARCHAR(255) PRIMARY KEY,
+                setting_value TEXT
+            )
+        """)
+    try:
+        cursor.execute("SELECT called_at FROM api_logs LIMIT 1")
+    except Exception:
+        cursor.execute("DROP TABLE IF EXISTS api_logs")
+        cursor.execute("""
+            CREATE TABLE api_logs (
+                id INTEGER PRIMARY KEY AUTO_INCREMENT,
+                called_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
     conn.close()
 
 
