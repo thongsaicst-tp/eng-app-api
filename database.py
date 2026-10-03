@@ -1,4 +1,4 @@
-import pymysql
+import psycopg2
 from urllib.parse import urlparse
 import os
 from datetime import datetime
@@ -7,30 +7,31 @@ def get_connection():
     import os
     db_url = os.environ.get("DATABASE_URL")
     if not db_url:
-        raise Exception("DATABASE_URL is missing. Format: mysql://user:pass@host:3306/dbname")
+        raise Exception("DATABASE_URL is missing. Format: postgresql://user:pass@host:3306/dbname")
     
-    if db_url.startswith("mysql+pymysql://"):
-        db_url = db_url.replace("mysql+pymysql://", "mysql://")
+    if db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql://")
         
     parsed = urlparse(db_url)
-    return pymysql.connect(
+    return psycopg2.connect(
         host=parsed.hostname,
         user=parsed.username,
         password=parsed.password,
-        database=parsed.path[1:],
-        port=parsed.port or 3306,
-        autocommit=True
+        dbname=parsed.path[1:],
+        port=parsed.port or 5432,
+        sslmode='require'
     )
 
 
 def init_db():
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     
     # ตารางเก็บข้อมูลผู้เล่น
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTO_INCREMENT,
+            id INTEGER PRIMARY KEY SERIAL,
             name VARCHAR(255) UNIQUE NOT NULL,
             is_deleted INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -40,7 +41,7 @@ def init_db():
     # ตารางเก็บคะแนนและการเล่น
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS progress (
-            id INTEGER PRIMARY KEY AUTO_INCREMENT,
+            id INTEGER PRIMARY KEY SERIAL,
             user_id INTEGER NOT NULL,
             topic TEXT,
             score INTEGER,
@@ -53,7 +54,7 @@ def init_db():
     # ตารางเก็บประวัติการเรียก API เพื่อหักโควต้า
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS api_logs (
-            id INTEGER PRIMARY KEY AUTO_INCREMENT,
+            id INTEGER PRIMARY KEY SERIAL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -69,12 +70,12 @@ def init_db():
     try:
         cursor.execute("ALTER TABLE users ADD COLUMN is_deleted INTEGER DEFAULT 0")
         conn.commit()
-    except pymysql.err.OperationalError:
+    except psycopg2.OperationalError:
         pass
     try:
         cursor.execute("ALTER TABLE user_profiles ADD COLUMN lost_streak INTEGER DEFAULT 0")
         conn.commit()
-    except pymysql.err.OperationalError:
+    except psycopg2.OperationalError:
         pass
     # ตารางโปรไฟล์เสริม (เงินออม, สตรีค)
     cursor.execute('''
@@ -90,7 +91,7 @@ def init_db():
 
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS wallet_history (
-            id INTEGER PRIMARY KEY AUTO_INCREMENT,
+            id INTEGER PRIMARY KEY SERIAL,
             user_id TEXT NOT NULL,
             amount INTEGER NOT NULL,
             reason TEXT NOT NULL,
@@ -104,6 +105,7 @@ def init_db():
 
 def get_setting(key: str, default_val: str):
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     cursor.execute("SELECT value FROM settings WHERE `key` = %s", (key,))
     row = cursor.fetchone()
@@ -112,6 +114,7 @@ def get_setting(key: str, default_val: str):
 
 def update_setting(key: str, value: str):
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     cursor.execute("REPLACE INTO settings (`key`, value) VALUES (%s, %s)", (key, value))
     conn.commit()
@@ -119,6 +122,7 @@ def update_setting(key: str, value: str):
 
 def log_api_call():
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     cursor.execute("INSERT INTO api_logs DEFAULT VALUES")
     conn.commit()
@@ -126,6 +130,7 @@ def log_api_call():
 
 def get_daily_quota_usage():
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     # นับจำนวนครั้งที่ใช้งานภายในวันนี้
     cursor.execute("SELECT COUNT(*) FROM api_logs WHERE DATE(created_at) = CURDATE()")
@@ -135,11 +140,12 @@ def get_daily_quota_usage():
 
 def get_or_create_user(name: str):
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     try:
         cursor.execute("ALTER TABLE users ADD COLUMN is_deleted INTEGER DEFAULT 0")
         conn.commit()
-    except pymysql.err.OperationalError:
+    except psycopg2.OperationalError:
         pass
     
     cursor.execute("SELECT id, name FROM users WHERE name = %s AND is_deleted = 0", (name,))
@@ -166,6 +172,7 @@ def get_or_create_user(name: str):
 
 def get_all_users():
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     cursor.execute("SELECT id, name FROM users ORDER BY id DESC")
     users = [{"id": row[0], "name": row[1]} for row in cursor.fetchall()]
@@ -175,6 +182,7 @@ def get_all_users():
 def save_progress(user_id: int, topic: str, score: int, stars: str):
     if user_id <= 0: return # ถ้าเป็น 0 คือเล่นแบบไม่ล็อกอิน (Guest)
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO progress (user_id, topic, score, stars)
@@ -185,6 +193,7 @@ def save_progress(user_id: int, topic: str, score: int, stars: str):
 
 def get_user_dashboard(user_id: int):
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     
     # สรุปผล: จำนวนครั้งที่เล่น, คะแนนเฉลี่ย, ดาวรวมทั้งหมด
@@ -207,14 +216,15 @@ def get_user_dashboard(user_id: int):
 
 def get_learning_history(user_id: int):
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     cursor.execute('''
         SELECT 
             DATE(created_at) as play_date, 
-            DATE_FORMAT(created_at, '%H:00') as play_hour, 
+            TO_CHAR(created_at, 'HH24:00') as play_hour, 
             COUNT(id) as interactions, 
             AVG(score) as avg_score,
-            GROUP_CONCAT(DISTINCT topic) as topics
+            STRING_AGG(DISTINCT topic, ',') as topics
         FROM progress 
         WHERE user_id = %s 
         GROUP BY play_date, play_hour
@@ -237,6 +247,7 @@ def get_learning_history(user_id: int):
 
 def reset_today_progress(user_id: int):
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     cursor.execute('''
         DELETE FROM progress 
@@ -248,6 +259,7 @@ def reset_today_progress(user_id: int):
 
 def get_today_dashboard(user_id: int):
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     cursor.execute('''
         SELECT 
@@ -271,13 +283,14 @@ def get_today_dashboard(user_id: int):
 def get_user_profile(user_id: int):
     from datetime import datetime, timedelta
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     
     # พยายามสร้างคอลัมน์ lost_streak ถ้ายังไม่มี
     try:
         cursor.execute("ALTER TABLE user_profiles ADD COLUMN lost_streak INTEGER DEFAULT 0")
         conn.commit()
-    except pymysql.err.OperationalError:
+    except psycopg2.OperationalError:
         pass # มีคอลัมน์อยู่แล้ว
 
     cursor.execute("SELECT wallet_balance, current_streak, last_played_date, gacha_claimed_date, lost_streak FROM user_profiles WHERE user_id=%s", (str(user_id),))
@@ -313,6 +326,7 @@ def get_user_profile(user_id: int):
 
 def restore_user_streak(user_id: int, cost: int):
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     cursor.execute("SELECT wallet_balance, lost_streak FROM user_profiles WHERE user_id=%s", (str(user_id),))
     row = cursor.fetchone()
@@ -327,6 +341,7 @@ def restore_user_streak(user_id: int, cost: int):
 
 def add_money(user_id: int, amount: int, reason: str = "ได้รับรางวัล"):
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     cursor.execute("INSERT IGNORE INTO user_profiles (user_id) VALUES (%s)", (str(user_id),))
     cursor.execute("UPDATE user_profiles SET wallet_balance = wallet_balance + %s WHERE user_id=%s", (amount, str(user_id)))
@@ -336,6 +351,7 @@ def add_money(user_id: int, amount: int, reason: str = "ได้รับรา
 
 def withdraw_money(user_id: int, amount: int, reason: str = "ถอนเงินสด (คุณพ่อจ่ายให้)"):
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     cursor.execute("SELECT wallet_balance FROM user_profiles WHERE user_id=%s", (str(user_id),))
     row = cursor.fetchone()
@@ -350,6 +366,7 @@ def withdraw_money(user_id: int, amount: int, reason: str = "ถอนเงิ�
 
 def get_wallet_history(user_id: int):
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     cursor.execute("SELECT amount, reason, created_at FROM wallet_history WHERE user_id=%s ORDER BY id DESC LIMIT 20", (str(user_id),))
     history = [{"amount": row[0], "reason": row[1], "date": row[2]} for row in cursor.fetchall()]
@@ -359,6 +376,7 @@ def get_wallet_history(user_id: int):
 def record_play_for_streak(user_id: int):
     from datetime import datetime, timedelta
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     cursor.execute("INSERT IGNORE INTO user_profiles (user_id) VALUES (%s)", (str(user_id),))
     
@@ -387,21 +405,22 @@ def get_connection():
     import os
     db_url = os.environ.get("DATABASE_URL")
     if not db_url:
-        raise Exception("DATABASE_URL is missing. Format: mysql://user:pass@host:3306/dbname")
+        raise Exception("DATABASE_URL is missing. Format: postgresql://user:pass@host:3306/dbname")
     
-    if db_url.startswith("mysql+pymysql://"):
-        db_url = db_url.replace("mysql+pymysql://", "mysql://")
+    if db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql://")
         
     parsed = urlparse(db_url)
-    return pymysql.connect(
+    return psycopg2.connect(
         host=parsed.hostname,
         user=parsed.username,
         password=parsed.password,
-        database=parsed.path[1:],
-        port=parsed.port or 3306,
-        autocommit=True
+        dbname=parsed.path[1:],
+        port=parsed.port or 5432,
+        sslmode='require'
     )
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     today = datetime.now().strftime('%Y-%m-%d')
     cursor.execute("UPDATE user_profiles SET wallet_balance = wallet_balance + %s, gacha_claimed_date = %s WHERE user_id=%s", (reward_amount, today, str(user_id)))
@@ -411,11 +430,12 @@ def get_connection():
 
 def get_admin_dashboard_data():
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     try:
         cursor.execute("ALTER TABLE users ADD COLUMN is_deleted INTEGER DEFAULT 0")
         conn.commit()
-    except pymysql.err.OperationalError:
+    except psycopg2.OperationalError:
         pass # already exists
 
     cursor.execute('''
@@ -447,11 +467,12 @@ def get_admin_dashboard_data():
 
 def delete_user(user_id: int):
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     try:
         cursor.execute("ALTER TABLE users ADD COLUMN is_deleted INTEGER DEFAULT 0")
         conn.commit()
-    except pymysql.err.OperationalError:
+    except psycopg2.OperationalError:
         pass
     cursor.execute("UPDATE users SET is_deleted = 1 WHERE id=%s", (user_id,))
     conn.commit()
@@ -459,6 +480,7 @@ def delete_user(user_id: int):
 
 def restore_user(user_id: int):
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     cursor.execute("UPDATE users SET is_deleted = 0 WHERE id=%s", (user_id,))
     conn.commit()
@@ -467,10 +489,11 @@ def restore_user(user_id: int):
 # ─── Invite Token System ───
 def _init_invite_table():
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS invite_tokens (
-            id INTEGER PRIMARY KEY AUTO_INCREMENT,
+            id INTEGER PRIMARY KEY SERIAL,
             code VARCHAR(255) UNIQUE,
             is_used INTEGER DEFAULT 0,
             used_by TEXT,
@@ -488,6 +511,7 @@ def generate_invite_code():
     code = "VIP-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
     
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     cursor.execute("INSERT INTO invite_tokens (code) VALUES (%s)", (code,))
     conn.commit()
@@ -497,6 +521,7 @@ def generate_invite_code():
 def get_all_invite_codes():
     _init_invite_table()
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     cursor.execute("SELECT code, is_used, used_by, created_at FROM invite_tokens ORDER BY id DESC")
     results = [{"code": r[0], "is_used": bool(r[1]), "used_by": r[2], "created_at": r[3]} for r in cursor.fetchall()]
@@ -506,6 +531,7 @@ def get_all_invite_codes():
 def validate_and_use_invite_code(code: str, username: str):
     _init_invite_table()
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     cursor.execute("SELECT is_used FROM invite_tokens WHERE code = %s", (code,))
     row = cursor.fetchone()
@@ -526,10 +552,11 @@ def validate_and_use_invite_code(code: str, username: str):
 # ─── Vocabulary Arsenal ───
 def _init_vocab_table():
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS user_vocabulary (
-            id INTEGER PRIMARY KEY AUTO_INCREMENT,
+            id INTEGER PRIMARY KEY SERIAL,
             user_id INTEGER,
             word VARCHAR(255),
             part_of_speech TEXT,
@@ -544,13 +571,14 @@ def _init_vocab_table():
 def add_vocabulary(user_id: int, word: str, pos: str, meaning: str):
     _init_vocab_table()
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     try:
         cursor.execute("INSERT INTO user_vocabulary (user_id, word, part_of_speech, meaning) VALUES (%s, %s, %s, %s)", 
                        (user_id, word, pos, meaning))
         conn.commit()
         success = True
-    except pymysql.err.IntegrityError:
+    except psycopg2.IntegrityError:
         success = False # Already has this word
     conn.close()
     return success
@@ -558,6 +586,7 @@ def add_vocabulary(user_id: int, word: str, pos: str, meaning: str):
 def get_user_vocabulary(user_id: int):
     _init_vocab_table()
     conn = get_connection()
+    conn.autocommit = True
     cursor = conn.cursor()
     cursor.execute("SELECT word, part_of_speech, meaning, created_at FROM user_vocabulary WHERE user_id = %s ORDER BY id DESC", (user_id,))
     vocab = [{"word": r[0], "part_of_speech": r[1], "meaning": r[2], "created_at": r[3]} for r in cursor.fetchall()]
