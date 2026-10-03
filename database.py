@@ -63,6 +63,19 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS settings (
+            setting_key VARCHAR(255) PRIMARY KEY,
+            setting_value TEXT
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS api_logs (
+            id INTEGER PRIMARY KEY AUTO_INCREMENT,
+            called_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
     conn.close()
 
 
@@ -418,4 +431,81 @@ def reset_today_progress(user_id: int):
     cursor = conn.cursor()
     today = datetime.now().strftime('%Y-%m-%d')
     cursor.execute("DELETE FROM progress WHERE user_id = %s AND DATE(created_at) = %s", (user_id, today))
+    conn.close()
+
+
+def get_setting(key: str, default: str = "") -> str:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT setting_value FROM settings WHERE setting_key = %s", (key,))
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        return row[0]
+    return default
+
+def update_setting(key: str, value: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO settings (setting_key, setting_value) VALUES (%s, %s) ON DUPLICATE KEY UPDATE setting_value = %s", (key, value, value))
+    conn.close()
+
+def get_or_create_user(name: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name FROM users WHERE name = %s AND is_deleted = 0", (name,))
+    row = cursor.fetchone()
+    if row:
+        conn.close()
+        return {"id": row[0], "name": row[1]}
+    cursor.execute("INSERT INTO users (name) VALUES (%s)", (name,))
+    new_id = cursor.lastrowid
+    conn.close()
+    return {"id": new_id, "name": name}
+
+def get_all_users():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name FROM users WHERE is_deleted = 0")
+    users = [{"id": row[0], "name": row[1]} for row in cursor.fetchall()]
+    conn.close()
+    return users
+
+def withdraw_money(user_id: int, amount: int):
+    return spend_wallet(user_id, amount, "ถอนเงิน")
+
+def add_money(user_id: int, amount: int, reason: str = "Reward"):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE user_profiles SET wallet_balance = wallet_balance + %s WHERE user_id=%s", (amount, user_id))
+    cursor.execute("INSERT INTO wallet_history (user_id, amount, reason) VALUES (%s, %s, %s)", (user_id, amount, reason))
+    conn.close()
+
+def restore_user_streak(user_id: int, cost: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT wallet_balance FROM user_profiles WHERE user_id=%s", (user_id,))
+    row = cursor.fetchone()
+    if row and row[0] >= cost:
+        cursor.execute("UPDATE user_profiles SET wallet_balance = wallet_balance - %s, lost_streak = 0 WHERE user_id=%s", (cost, user_id))
+        cursor.execute("INSERT INTO wallet_history (user_id, amount, reason) VALUES (%s, %s, %s)", (user_id, -cost, "ซื้อ Streak คืน"))
+        conn.close()
+        return True
+    conn.close()
+    return False
+
+def get_daily_quota_usage():
+    from datetime import datetime
+    conn = get_connection()
+    cursor = conn.cursor()
+    today = datetime.now().strftime('%Y-%m-%d')
+    cursor.execute("SELECT COUNT(*) FROM api_logs WHERE DATE(called_at) = %s", (today,))
+    row = cursor.fetchone()
+    conn.close()
+    return row[0] if row else 0
+
+def log_api_call():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO api_logs (called_at) VALUES (CURRENT_TIMESTAMP)")
     conn.close()
