@@ -360,3 +360,62 @@ def get_user_vocabulary(user_id: int):
     vocab = [{"word": r[0], "part_of_speech": r[1], "meaning": r[2], "created_at": r[3].strftime('%Y-%m-%d %H:%M:%S') if r[3] else None} for r in cursor.fetchall()]
     conn.close()
     return vocab
+
+
+def get_user_dashboard(user_id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*), AVG(score), SUM(stars) FROM progress WHERE user_id = %s", (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return {
+        "total_interactions": row[0] or 0,
+        "average_score": round(float(row[1]) if row[1] else 0, 1),
+        "total_stars": row[2] or 0
+    }
+
+def get_today_dashboard(user_id: int):
+    from datetime import datetime
+    conn = get_connection()
+    cursor = conn.cursor()
+    today = datetime.now().strftime('%Y-%m-%d')
+    cursor.execute("SELECT COUNT(*), AVG(score), SUM(stars) FROM progress WHERE user_id = %s AND DATE(created_at) = %s", (user_id, today))
+    row = cursor.fetchone()
+    conn.close()
+    return {
+        "interactions": row[0] or 0,
+        "average_score": round(float(row[1]) if row[1] else 0, 1),
+        "total_stars": row[2] or 0
+    }
+
+def get_user_profile(user_id: int):
+    from datetime import datetime
+    conn = get_connection()
+    cursor = conn.cursor()
+    today = datetime.now().strftime('%Y-%m-%d')
+    cursor.execute("SELECT wallet_balance, current_streak, last_played_date, gacha_claimed_date, lost_streak FROM user_profiles WHERE user_id = %s", (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        return {
+            "wallet_balance": row[0] or 0,
+            "current_streak": row[1] or 0,
+            "last_played_date": str(row[2]) if row[2] else None,
+            "gacha_claimed_today": (str(row[3]) == today),
+            "lost_streak": row[4] or 0
+        }
+    return {
+        "wallet_balance": 0,
+        "current_streak": 0,
+        "last_played_date": None,
+        "gacha_claimed_today": False,
+        "lost_streak": 0
+    }
+
+def reset_today_progress(user_id: int):
+    from datetime import datetime
+    conn = get_connection()
+    cursor = conn.cursor()
+    today = datetime.now().strftime('%Y-%m-%d')
+    cursor.execute("DELETE FROM progress WHERE user_id = %s AND DATE(created_at) = %s", (user_id, today))
+    conn.close()
