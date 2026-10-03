@@ -329,7 +329,7 @@ def create_user(req: UserRequest):
     # 2. If NEW user, check allow_registration first
     conn = db_module.get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT value FROM settings WHERE key = 'allow_registration'")
+    cursor.execute("SELECT value FROM settings WHERE `key` = 'allow_registration'")
     reg_setting = cursor.fetchone()
     conn.close()
     

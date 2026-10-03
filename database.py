@@ -60,11 +60,11 @@ def init_db():
     # ตารางเก็บการตั้งค่าของระบบ (เช่น Quota)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS settings (
-            key VARCHAR(255) PRIMARY KEY,
+            `key` VARCHAR(255) PRIMARY KEY,
             value TEXT
         )
     ''')
-    cursor.execute("INSERT IGNORE INTO settings (key, value) VALUES ('daily_quota', '100')")
+    cursor.execute("INSERT IGNORE INTO settings (`key`, value) VALUES ('daily_quota', '100')")
     # ตารางโปรไฟล์เสริม (เงินออม, สตรีค)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS user_profiles (
@@ -93,7 +93,7 @@ def init_db():
 def get_setting(key: str, default_val: str):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT value FROM settings WHERE key = %s", (key,))
+    cursor.execute("SELECT value FROM settings WHERE `key` = %s", (key,))
     row = cursor.fetchone()
     conn.close()
     return row[0] if row else default_val
@@ -101,7 +101,7 @@ def get_setting(key: str, default_val: str):
 def update_setting(key: str, value: str):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("REPLACE INTO settings (key, value) VALUES (%s, %s)", (key, value))
+    cursor.execute("REPLACE INTO settings (`key`, value) VALUES (%s, %s)", (key, value))
     conn.commit()
     conn.close()
 
@@ -135,7 +135,7 @@ def get_or_create_user(name: str):
     
     if not user:
         # Check if registration is locked
-        cursor.execute("SELECT value FROM settings WHERE key = 'allow_registration'")
+        cursor.execute("SELECT value FROM settings WHERE `key` = 'allow_registration'")
         reg_setting = cursor.fetchone()
         allow_reg = True
         if reg_setting and reg_setting[0] == 'false':
