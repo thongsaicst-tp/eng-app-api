@@ -144,7 +144,8 @@ def get_learning_history(user_id: int):
         })
     return history
 
-def get_dashboard_stats(user_id: int):\n    init_db()
+def get_dashboard_stats(user_id: int):
+    init_db()
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*), AVG(score), SUM(stars) FROM progress WHERE user_id = %s", (user_id,))
@@ -434,7 +435,8 @@ def reset_today_progress(user_id: int):
     conn.close()
 
 
-def get_setting(key: str, default: str = "") -> str:\n    init_db()
+def get_setting(key: str, default: str = "") -> str:
+    init_db()
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT setting_value FROM settings WHERE setting_key = %s", (key,))
