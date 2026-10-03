@@ -13,6 +13,7 @@ groq
 # Provider 3: Ollama (local) - ใช้ httpx (มีอยู่แล้ว) + openai-whisper สำหรับ STT
 httpx
 openai-whisper
-psycopg2-binary
+pymysql
 edge-tts
+
 
