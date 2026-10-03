@@ -192,7 +192,7 @@ def get_user_dashboard(user_id: int):
         SELECT 
             COUNT(*) as total_interactions,
             AVG(score) as avg_score,
-            SUM(CASE WHEN stars LIKE '%⭐%' THEN length(stars) ELSE 0 END) as total_stars
+            SUM(CASE WHEN stars LIKE '%⭐%' THEN CHAR_LENGTH(stars) ELSE 0 END) as total_stars
         FROM progress
         WHERE user_id = %s
     ''', (user_id,))
@@ -211,7 +211,7 @@ def get_learning_history(user_id: int):
     cursor.execute('''
         SELECT 
             DATE(created_at) as play_date, 
-            strftime('%H:00', created_at, 'localtime') as play_hour, 
+            DATE_FORMAT(created_at, '%H:00') as play_hour, 
             COUNT(id) as interactions, 
             AVG(score) as avg_score,
             GROUP_CONCAT(DISTINCT topic) as topics
@@ -253,7 +253,7 @@ def get_today_dashboard(user_id: int):
         SELECT 
             COUNT(id), 
             AVG(score), 
-            SUM(CASE WHEN stars LIKE '%⭐%' THEN length(stars) ELSE 0 END),
+            SUM(CASE WHEN stars LIKE '%⭐%' THEN CHAR_LENGTH(stars) ELSE 0 END),
             SUM(CASE WHEN topic LIKE 'Game_%' THEN 1 ELSE 0 END)
         FROM progress 
         WHERE user_id = %s AND DATE(created_at) = CURDATE()
