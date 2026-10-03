@@ -314,13 +314,12 @@ def read_root():
 # ─── Users & Dashboard Endpoints ──────────────────────────────────────────────
 @app.post("/api/v1/users")
 def create_user(req: UserRequest):
-    import sqlite3
-    from database import DB_FILE
+    import database as db_module
     
     # 1. Check if user already exists
-    conn = sqlite3.connect(DB_FILE)
+    conn = db_module.get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id FROM users WHERE name = ? AND (is_deleted = 0 OR is_deleted IS NULL)", (req.name,))
+    cursor.execute("SELECT id FROM users WHERE name = %s AND (is_deleted = 0 OR is_deleted IS NULL)", (req.name,))
     exists = cursor.fetchone()
     conn.close()
     
@@ -328,7 +327,7 @@ def create_user(req: UserRequest):
         return database.get_or_create_user(req.name)
     
     # 2. If NEW user, check allow_registration first
-    conn = sqlite3.connect(DB_FILE)
+    conn = db_module.get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT value FROM settings WHERE key = 'allow_registration'")
     reg_setting = cursor.fetchone()
@@ -351,9 +350,9 @@ def create_user(req: UserRequest):
             raise HTTPException(status_code=403, detail="รหัสเชิญไม่ถูกต้อง หรือถูกใช้งานไปแล้ว!")
             
         # Code is valid, bypass the lock for this user
-        conn = sqlite3.connect(DB_FILE)
+        conn = db_module.get_connection()
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO users (name) VALUES (?)", (req.name,))
+        cursor.execute("INSERT INTO users (name) VALUES (%s)", (req.name,))
         conn.commit()
         user_id = cursor.lastrowid
         conn.close()
@@ -626,12 +625,11 @@ def admin_adjust_wallet(req: AdminAdjustRequest):
     if req.amount >= 0:
         database.add_money(req.user_id, req.amount, req.reason)
     else:
-        import sqlite3
-        from database import DB_FILE
-        conn = sqlite3.connect(DB_FILE)
+        import database as db_module
+        conn = db_module.get_connection()
         cursor = conn.cursor()
-        cursor.execute("UPDATE user_profiles SET wallet_balance = wallet_balance + ? WHERE user_id=?", (req.amount, str(req.user_id)))
-        cursor.execute("INSERT INTO wallet_history (user_id, amount, reason) VALUES (?, ?, ?)", (str(req.user_id), req.amount, req.reason))
+        cursor.execute("UPDATE user_profiles SET wallet_balance = wallet_balance + %s WHERE user_id=%s", (req.amount, str(req.user_id)))
+        cursor.execute("INSERT INTO wallet_history (user_id, amount, reason) VALUES (%s, %s, %s)", (str(req.user_id), req.amount, req.reason))
         conn.commit()
         conn.close()
     return {"status": "success", "message": f"ปรับยอดเงิน {req.amount} บาท สำเร็จ!"}

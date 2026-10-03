@@ -1,17 +1,36 @@
-import sqlite3
+import pymysql
+from urllib.parse import urlparse
 import os
 from datetime import datetime
 
-DB_FILE = "eng_app.db"
+def get_connection():
+    import os
+    db_url = os.environ.get("DATABASE_URL")
+    if not db_url:
+        raise Exception("DATABASE_URL is missing. Format: mysql://user:pass@host:3306/dbname")
+    
+    if db_url.startswith("mysql+pymysql://"):
+        db_url = db_url.replace("mysql+pymysql://", "mysql://")
+        
+    parsed = urlparse(db_url)
+    return pymysql.connect(
+        host=parsed.hostname,
+        user=parsed.username,
+        password=parsed.password,
+        database=parsed.path[1:],
+        port=parsed.port or 3306,
+        autocommit=True
+    )
+
 
 def init_db():
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
     
     # ตารางเก็บข้อมูลผู้เล่น
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY AUTO_INCREMENT,
             name TEXT UNIQUE NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -20,7 +39,7 @@ def init_db():
     # ตารางเก็บคะแนนและการเล่น
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS progress (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY AUTO_INCREMENT,
             user_id INTEGER NOT NULL,
             topic TEXT,
             score INTEGER,
@@ -33,7 +52,7 @@ def init_db():
     # ตารางเก็บประวัติการเรียก API เพื่อหักโควต้า
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS api_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY AUTO_INCREMENT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -45,7 +64,7 @@ def init_db():
             value TEXT
         )
     ''')
-    cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('daily_quota', '100')")
+    cursor.execute("INSERT IGNORE INTO settings (key, value) VALUES ('daily_quota', '100')")
     # ตารางโปรไฟล์เสริม (เงินออม, สตรีค)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS user_profiles (
@@ -59,7 +78,7 @@ def init_db():
 
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS wallet_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY AUTO_INCREMENT,
             user_id TEXT NOT NULL,
             amount INTEGER NOT NULL,
             reason TEXT NOT NULL,
@@ -72,29 +91,29 @@ def init_db():
     print("Database initialized successfully.")
 
 def get_setting(key: str, default_val: str):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT value FROM settings WHERE key = ?", (key,))
+    cursor.execute("SELECT value FROM settings WHERE key = %s", (key,))
     row = cursor.fetchone()
     conn.close()
     return row[0] if row else default_val
 
 def update_setting(key: str, value: str):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
+    cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (%s, %s)", (key, value))
     conn.commit()
     conn.close()
 
 def log_api_call():
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("INSERT INTO api_logs DEFAULT VALUES")
     conn.commit()
     conn.close()
 
 def get_daily_quota_usage():
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
     # นับจำนวนครั้งที่ใช้งานภายในวันนี้
     cursor.execute("SELECT COUNT(*) FROM api_logs WHERE date(created_at, 'localtime') = date('now', 'localtime')")
@@ -103,15 +122,15 @@ def get_daily_quota_usage():
     return used
 
 def get_or_create_user(name: str):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute("ALTER TABLE users ADD COLUMN is_deleted INTEGER DEFAULT 0")
         conn.commit()
-    except sqlite3.OperationalError:
+    except pymysql.err.OperationalError:
         pass
     
-    cursor.execute("SELECT id, name FROM users WHERE name = ? AND is_deleted = 0", (name,))
+    cursor.execute("SELECT id, name FROM users WHERE name = %s AND is_deleted = 0", (name,))
     user = cursor.fetchone()
     
     if not user:
@@ -126,7 +145,7 @@ def get_or_create_user(name: str):
             conn.close()
             return None  # Rejects creation
 
-        cursor.execute("INSERT INTO users (name) VALUES (?)", (name,))
+        cursor.execute("INSERT INTO users (name) VALUES (%s)", (name,))
         conn.commit()
         user_id = cursor.lastrowid
         user = (user_id, name)
@@ -134,7 +153,7 @@ def get_or_create_user(name: str):
     return {"id": user[0], "name": user[1]}
 
 def get_all_users():
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT id, name FROM users ORDER BY id DESC")
     users = [{"id": row[0], "name": row[1]} for row in cursor.fetchall()]
@@ -143,17 +162,17 @@ def get_all_users():
 
 def save_progress(user_id: int, topic: str, score: int, stars: str):
     if user_id <= 0: return # ถ้าเป็น 0 คือเล่นแบบไม่ล็อกอิน (Guest)
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO progress (user_id, topic, score, stars)
-        VALUES (?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s)
     ''', (user_id, topic, score, stars))
     conn.commit()
     conn.close()
 
 def get_user_dashboard(user_id: int):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
     
     # สรุปผล: จำนวนครั้งที่เล่น, คะแนนเฉลี่ย, ดาวรวมทั้งหมด
@@ -163,7 +182,7 @@ def get_user_dashboard(user_id: int):
             AVG(score) as avg_score,
             SUM(CASE WHEN stars LIKE '%⭐%' THEN length(stars) ELSE 0 END) as total_stars
         FROM progress
-        WHERE user_id = ?
+        WHERE user_id = %s
     ''', (user_id,))
     row = cursor.fetchone()
     conn.close()
@@ -175,7 +194,7 @@ def get_user_dashboard(user_id: int):
     }
 
 def get_learning_history(user_id: int):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('''
         SELECT 
@@ -185,7 +204,7 @@ def get_learning_history(user_id: int):
             AVG(score) as avg_score,
             GROUP_CONCAT(DISTINCT topic) as topics
         FROM progress 
-        WHERE user_id = ? 
+        WHERE user_id = %s 
         GROUP BY play_date, play_hour
         ORDER BY play_date DESC, play_hour DESC
         LIMIT 50
@@ -205,18 +224,18 @@ def get_learning_history(user_id: int):
     return history
 
 def reset_today_progress(user_id: int):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('''
         DELETE FROM progress 
-        WHERE user_id = ? AND date(created_at, 'localtime') = date('now', 'localtime')
+        WHERE user_id = %s AND date(created_at, 'localtime') = date('now', 'localtime')
     ''', (user_id,))
     conn.commit()
     conn.close()
     return True
 
 def get_today_dashboard(user_id: int):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('''
         SELECT 
@@ -225,7 +244,7 @@ def get_today_dashboard(user_id: int):
             SUM(CASE WHEN stars LIKE '%⭐%' THEN length(stars) ELSE 0 END),
             SUM(CASE WHEN topic LIKE 'Game_%' THEN 1 ELSE 0 END)
         FROM progress 
-        WHERE user_id = ? AND date(created_at, 'localtime') = date('now', 'localtime')
+        WHERE user_id = %s AND date(created_at, 'localtime') = date('now', 'localtime')
     ''', (user_id,))
     row = cursor.fetchone()
     conn.close()
@@ -239,24 +258,24 @@ def get_today_dashboard(user_id: int):
 # ─── User Profile & Wallet ───
 def get_user_profile(user_id: int):
     from datetime import datetime, timedelta
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
     
     # พยายามสร้างคอลัมน์ lost_streak ถ้ายังไม่มี
     try:
         cursor.execute("ALTER TABLE user_profiles ADD COLUMN lost_streak INTEGER DEFAULT 0")
         conn.commit()
-    except sqlite3.OperationalError:
+    except pymysql.err.OperationalError:
         pass # มีคอลัมน์อยู่แล้ว
 
-    cursor.execute("SELECT wallet_balance, current_streak, last_played_date, gacha_claimed_date, lost_streak FROM user_profiles WHERE user_id=?", (str(user_id),))
+    cursor.execute("SELECT wallet_balance, current_streak, last_played_date, gacha_claimed_date, lost_streak FROM user_profiles WHERE user_id=%s", (str(user_id),))
     row = cursor.fetchone()
     
     today = datetime.now().strftime('%Y-%m-%d')
     yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
     
     if not row:
-        cursor.execute("INSERT INTO user_profiles (user_id) VALUES (?)", (str(user_id),))
+        cursor.execute("INSERT INTO user_profiles (user_id) VALUES (%s)", (str(user_id),))
         conn.commit()
         conn.close()
         return {"wallet_balance": 0, "current_streak": 0, "last_played_date": None, "gacha_claimed_date": None, "lost_streak": 0}
@@ -268,7 +287,7 @@ def get_user_profile(user_id: int):
     if last_played_date and last_played_date < yesterday and current_streak > 0:
         lost_streak = current_streak
         current_streak = 0
-        cursor.execute("UPDATE user_profiles SET current_streak = 0, lost_streak = ? WHERE user_id=?", (lost_streak, str(user_id)))
+        cursor.execute("UPDATE user_profiles SET current_streak = 0, lost_streak = %s WHERE user_id=%s", (lost_streak, str(user_id)))
         conn.commit()
 
     conn.close()
@@ -281,13 +300,13 @@ def get_user_profile(user_id: int):
     }
 
 def restore_user_streak(user_id: int, cost: int):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT wallet_balance, lost_streak FROM user_profiles WHERE user_id=?", (str(user_id),))
+    cursor.execute("SELECT wallet_balance, lost_streak FROM user_profiles WHERE user_id=%s", (str(user_id),))
     row = cursor.fetchone()
     if row and row[0] >= cost and row[1] > 0:
-        cursor.execute("UPDATE user_profiles SET wallet_balance = wallet_balance - ?, current_streak = ?, lost_streak = 0 WHERE user_id=?", (cost, row[1], str(user_id)))
-        cursor.execute("INSERT INTO wallet_history (user_id, amount, reason) VALUES (?, ?, ?)", (str(user_id), -cost, "จ่ายเงินฟื้นคืนชีพ Streak"))
+        cursor.execute("UPDATE user_profiles SET wallet_balance = wallet_balance - %s, current_streak = %s, lost_streak = 0 WHERE user_id=%s", (cost, row[1], str(user_id)))
+        cursor.execute("INSERT INTO wallet_history (user_id, amount, reason) VALUES (%s, %s, %s)", (str(user_id), -cost, "จ่ายเงินฟื้นคืนชีพ Streak"))
         conn.commit()
         conn.close()
         return True
@@ -295,22 +314,22 @@ def restore_user_streak(user_id: int, cost: int):
     return False
 
 def add_money(user_id: int, amount: int, reason: str = "ได้รับรางวัล"):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("INSERT OR IGNORE INTO user_profiles (user_id) VALUES (?)", (str(user_id),))
-    cursor.execute("UPDATE user_profiles SET wallet_balance = wallet_balance + ? WHERE user_id=?", (amount, str(user_id)))
-    cursor.execute("INSERT INTO wallet_history (user_id, amount, reason) VALUES (?, ?, ?)", (str(user_id), amount, reason))
+    cursor.execute("INSERT IGNORE INTO user_profiles (user_id) VALUES (%s)", (str(user_id),))
+    cursor.execute("UPDATE user_profiles SET wallet_balance = wallet_balance + %s WHERE user_id=%s", (amount, str(user_id)))
+    cursor.execute("INSERT INTO wallet_history (user_id, amount, reason) VALUES (%s, %s, %s)", (str(user_id), amount, reason))
     conn.commit()
     conn.close()
 
 def withdraw_money(user_id: int, amount: int, reason: str = "ถอนเงินสด (คุณพ่อจ่ายให้)"):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT wallet_balance FROM user_profiles WHERE user_id=?", (str(user_id),))
+    cursor.execute("SELECT wallet_balance FROM user_profiles WHERE user_id=%s", (str(user_id),))
     row = cursor.fetchone()
     if row and row[0] >= amount:
-        cursor.execute("UPDATE user_profiles SET wallet_balance = wallet_balance - ? WHERE user_id=?", (amount, str(user_id)))
-        cursor.execute("INSERT INTO wallet_history (user_id, amount, reason) VALUES (?, ?, ?)", (str(user_id), -amount, reason))
+        cursor.execute("UPDATE user_profiles SET wallet_balance = wallet_balance - %s WHERE user_id=%s", (amount, str(user_id)))
+        cursor.execute("INSERT INTO wallet_history (user_id, amount, reason) VALUES (%s, %s, %s)", (str(user_id), -amount, reason))
         conn.commit()
         conn.close()
         return True
@@ -318,54 +337,73 @@ def withdraw_money(user_id: int, amount: int, reason: str = "ถอนเงิ�
     return False
 
 def get_wallet_history(user_id: int):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT amount, reason, created_at FROM wallet_history WHERE user_id=? ORDER BY id DESC LIMIT 20", (str(user_id),))
+    cursor.execute("SELECT amount, reason, created_at FROM wallet_history WHERE user_id=%s ORDER BY id DESC LIMIT 20", (str(user_id),))
     history = [{"amount": row[0], "reason": row[1], "date": row[2]} for row in cursor.fetchall()]
     conn.close()
     return history
 
 def record_play_for_streak(user_id: int):
     from datetime import datetime, timedelta
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("INSERT OR IGNORE INTO user_profiles (user_id) VALUES (?)", (str(user_id),))
+    cursor.execute("INSERT IGNORE INTO user_profiles (user_id) VALUES (%s)", (str(user_id),))
     
     today = datetime.now().strftime('%Y-%m-%d')
     yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
     
-    cursor.execute("SELECT current_streak, last_played_date FROM user_profiles WHERE user_id=?", (str(user_id),))
+    cursor.execute("SELECT current_streak, last_played_date FROM user_profiles WHERE user_id=%s", (str(user_id),))
     row = cursor.fetchone()
     
     if row:
         streak, last_date = row[0], row[1]
         if last_date == yesterday:
-            cursor.execute("UPDATE user_profiles SET current_streak = current_streak + 1, last_played_date = ? WHERE user_id=?", (today, str(user_id)))
+            cursor.execute("UPDATE user_profiles SET current_streak = current_streak + 1, last_played_date = %s WHERE user_id=%s", (today, str(user_id)))
         elif last_date != today:
-            cursor.execute("UPDATE user_profiles SET current_streak = 1, last_played_date = ? WHERE user_id=?", (today, str(user_id)))
+            cursor.execute("UPDATE user_profiles SET current_streak = 1, last_played_date = %s WHERE user_id=%s", (today, str(user_id)))
     else:
-        cursor.execute("UPDATE user_profiles SET current_streak = 1, last_played_date = ? WHERE user_id=?", (today, str(user_id)))
+        cursor.execute("UPDATE user_profiles SET current_streak = 1, last_played_date = %s WHERE user_id=%s", (today, str(user_id)))
 
     conn.commit()
     conn.close()
 
 def claim_daily_gacha(user_id: int, reward_amount: int):
     from datetime import datetime
-    conn = sqlite3.connect(DB_FILE)
+
+def get_connection():
+    import os
+    db_url = os.environ.get("DATABASE_URL")
+    if not db_url:
+        raise Exception("DATABASE_URL is missing. Format: mysql://user:pass@host:3306/dbname")
+    
+    if db_url.startswith("mysql+pymysql://"):
+        db_url = db_url.replace("mysql+pymysql://", "mysql://")
+        
+    parsed = urlparse(db_url)
+    return pymysql.connect(
+        host=parsed.hostname,
+        user=parsed.username,
+        password=parsed.password,
+        database=parsed.path[1:],
+        port=parsed.port or 3306,
+        autocommit=True
+    )
+    conn = get_connection()
     cursor = conn.cursor()
     today = datetime.now().strftime('%Y-%m-%d')
-    cursor.execute("UPDATE user_profiles SET wallet_balance = wallet_balance + ?, gacha_claimed_date = ? WHERE user_id=?", (reward_amount, today, str(user_id)))
-    cursor.execute("INSERT INTO wallet_history (user_id, amount, reason) VALUES (?, ?, ?)", (str(user_id), reward_amount, "สุ่มกาชาประจำวัน"))
+    cursor.execute("UPDATE user_profiles SET wallet_balance = wallet_balance + %s, gacha_claimed_date = %s WHERE user_id=%s", (reward_amount, today, str(user_id)))
+    cursor.execute("INSERT INTO wallet_history (user_id, amount, reason) VALUES (%s, %s, %s)", (str(user_id), reward_amount, "สุ่มกาชาประจำวัน"))
     conn.commit()
     conn.close()
 
 def get_admin_dashboard_data():
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute("ALTER TABLE users ADD COLUMN is_deleted INTEGER DEFAULT 0")
         conn.commit()
-    except sqlite3.OperationalError:
+    except pymysql.err.OperationalError:
         pass # already exists
 
     cursor.execute('''
@@ -396,31 +434,31 @@ def get_admin_dashboard_data():
     return users
 
 def delete_user(user_id: int):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute("ALTER TABLE users ADD COLUMN is_deleted INTEGER DEFAULT 0")
         conn.commit()
-    except sqlite3.OperationalError:
+    except pymysql.err.OperationalError:
         pass
-    cursor.execute("UPDATE users SET is_deleted = 1 WHERE id=?", (user_id,))
+    cursor.execute("UPDATE users SET is_deleted = 1 WHERE id=%s", (user_id,))
     conn.commit()
     conn.close()
 
 def restore_user(user_id: int):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("UPDATE users SET is_deleted = 0 WHERE id=?", (user_id,))
+    cursor.execute("UPDATE users SET is_deleted = 0 WHERE id=%s", (user_id,))
     conn.commit()
     conn.close()
 
 # ─── Invite Token System ───
 def _init_invite_table():
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS invite_tokens (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY AUTO_INCREMENT,
             code TEXT UNIQUE,
             is_used INTEGER DEFAULT 0,
             used_by TEXT,
@@ -437,16 +475,16 @@ def generate_invite_code():
     # e.g., VIP-A7K9
     code = "VIP-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
     
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO invite_tokens (code) VALUES (?)", (code,))
+    cursor.execute("INSERT INTO invite_tokens (code) VALUES (%s)", (code,))
     conn.commit()
     conn.close()
     return code
 
 def get_all_invite_codes():
     _init_invite_table()
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT code, is_used, used_by, created_at FROM invite_tokens ORDER BY id DESC")
     results = [{"code": r[0], "is_used": bool(r[1]), "used_by": r[2], "created_at": r[3]} for r in cursor.fetchall()]
@@ -455,9 +493,9 @@ def get_all_invite_codes():
 
 def validate_and_use_invite_code(code: str, username: str):
     _init_invite_table()
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT is_used FROM invite_tokens WHERE code = ?", (code,))
+    cursor.execute("SELECT is_used FROM invite_tokens WHERE code = %s", (code,))
     row = cursor.fetchone()
     
     if not row:
@@ -468,18 +506,18 @@ def validate_and_use_invite_code(code: str, username: str):
         return False # Code already used
         
     # Valid! Mark as used
-    cursor.execute("UPDATE invite_tokens SET is_used = 1, used_by = ? WHERE code = ?", (username, code))
+    cursor.execute("UPDATE invite_tokens SET is_used = 1, used_by = %s WHERE code = %s", (username, code))
     conn.commit()
     conn.close()
     return True
 
 # ─── Vocabulary Arsenal ───
 def _init_vocab_table():
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS user_vocabulary (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY AUTO_INCREMENT,
             user_id INTEGER,
             word TEXT,
             part_of_speech TEXT,
@@ -493,23 +531,23 @@ def _init_vocab_table():
 
 def add_vocabulary(user_id: int, word: str, pos: str, meaning: str):
     _init_vocab_table()
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("INSERT INTO user_vocabulary (user_id, word, part_of_speech, meaning) VALUES (?, ?, ?, ?)", 
+        cursor.execute("INSERT INTO user_vocabulary (user_id, word, part_of_speech, meaning) VALUES (%s, %s, %s, %s)", 
                        (user_id, word, pos, meaning))
         conn.commit()
         success = True
-    except sqlite3.IntegrityError:
+    except pymysql.err.IntegrityError:
         success = False # Already has this word
     conn.close()
     return success
 
 def get_user_vocabulary(user_id: int):
     _init_vocab_table()
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT word, part_of_speech, meaning, created_at FROM user_vocabulary WHERE user_id = ? ORDER BY id DESC", (user_id,))
+    cursor.execute("SELECT word, part_of_speech, meaning, created_at FROM user_vocabulary WHERE user_id = %s ORDER BY id DESC", (user_id,))
     vocab = [{"word": r[0], "part_of_speech": r[1], "meaning": r[2], "created_at": r[3]} for r in cursor.fetchall()]
     conn.close()
     return vocab
