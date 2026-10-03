@@ -32,6 +32,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTO_INCREMENT,
             name VARCHAR(255) UNIQUE NOT NULL,
+            is_deleted INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -65,6 +66,16 @@ def init_db():
         )
     ''')
     cursor.execute("INSERT IGNORE INTO settings (`key`, value) VALUES ('daily_quota', '100')")
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN is_deleted INTEGER DEFAULT 0")
+        conn.commit()
+    except pymysql.err.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE user_profiles ADD COLUMN lost_streak INTEGER DEFAULT 0")
+        conn.commit()
+    except pymysql.err.OperationalError:
+        pass
     # ตารางโปรไฟล์เสริม (เงินออม, สตรีค)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS user_profiles (
@@ -72,7 +83,8 @@ def init_db():
             wallet_balance INTEGER DEFAULT 0,
             current_streak INTEGER DEFAULT 0,
             last_played_date TEXT,
-            gacha_claimed_date TEXT
+            gacha_claimed_date TEXT,
+            lost_streak INTEGER DEFAULT 0
         )
     ''')
 
