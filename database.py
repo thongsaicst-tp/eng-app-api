@@ -120,7 +120,7 @@ def get_learning_history(user_id: int):
     cursor.execute('''
         SELECT 
             DATE(created_at) as play_date, 
-            DATE_FORMAT(created_at, '%H:00') as play_hour, 
+            DATE_FORMAT(created_at, '%%H:00') as play_hour, 
             COUNT(id) as interactions, 
             AVG(score) as avg_score,
             GROUP_CONCAT(DISTINCT topic) as topics
@@ -144,7 +144,7 @@ def get_learning_history(user_id: int):
         })
     return history
 
-def get_dashboard_stats(user_id: int):
+def get_dashboard_stats(user_id: int):\n    init_db()
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*), AVG(score), SUM(stars) FROM progress WHERE user_id = %s", (user_id,))
@@ -434,7 +434,7 @@ def reset_today_progress(user_id: int):
     conn.close()
 
 
-def get_setting(key: str, default: str = "") -> str:
+def get_setting(key: str, default: str = "") -> str:\n    init_db()
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT setting_value FROM settings WHERE setting_key = %s", (key,))
