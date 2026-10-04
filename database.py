@@ -116,11 +116,15 @@ def create_user(name: str):
     return {"id": new_id, "name": name}
 
 def save_progress(user_id: int, topic: str, score: int, stars: int):
+    try:
     init_db()
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("INSERT INTO progress (user_id, topic, score, stars) VALUES (%s, %s, %s, %s)", (user_id, topic, score, stars))
-    conn.close()
+    except Exception as e:
+        print(f"DB Error save_progress: {e}")
+    finally:
+        conn.close()
 
 def get_learning_history(user_id: int):
     conn = get_connection()
@@ -207,6 +211,7 @@ def get_wallet_history(user_id: int):
     return history
 
 def record_play_for_streak(user_id: int):
+    try:
     from datetime import datetime, timedelta
     conn = get_connection()
     cursor = conn.cursor()
@@ -362,6 +367,7 @@ def _init_vocab_table():
     conn.close()
 
 def add_vocabulary(user_id: int, word: str, pos: str, meaning: str):
+    try:
     _init_vocab_table()
     conn = get_connection()
     cursor = conn.cursor()
