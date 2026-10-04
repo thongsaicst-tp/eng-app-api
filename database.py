@@ -1,4 +1,4 @@
-﻿import pymysql
+import pymysql
 from urllib.parse import urlparse
 import os
 from datetime import datetime
@@ -116,13 +116,13 @@ def create_user(name: str):
     return {"id": new_id, "name": name}
 
 def save_progress(user_id: int, topic: str, score: int, stars: int):
-    try:
     init_db()
     conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO progress (user_id, topic, score, stars) VALUES (%s, %s, %s, %s)", (user_id, topic, score, stars))
+    try:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO progress (user_id, topic, score, stars) VALUES (%s, %s, %s, %s)", (user_id, topic, score, stars))
     except Exception as e:
-        print(f"DB Error save_progress: {e}")
+        print(f"[DB] save_progress skipped for user_id={user_id}: {e}")
     finally:
         conn.close()
 
@@ -211,29 +211,28 @@ def get_wallet_history(user_id: int):
     return history
 
 def record_play_for_streak(user_id: int):
-    try:
     from datetime import datetime, timedelta
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("INSERT IGNORE INTO user_profiles (user_id) VALUES (%s)", (user_id,))
-    
-    today = datetime.now().strftime('%Y-%m-%d')
-    yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-    
-    cursor.execute("SELECT current_streak, last_played_date FROM user_profiles WHERE user_id=%s", (user_id,))
-    row = cursor.fetchone()
-    
-    if row:
-        streak, last_date = row[0], row[1]
-        last_date_str = str(last_date) if last_date else None
-        if last_date_str == yesterday:
-            cursor.execute("UPDATE user_profiles SET current_streak = current_streak + 1, last_played_date = %s WHERE user_id=%s", (today, user_id))
-        elif last_date_str != today:
+    try:
+        cursor.execute("INSERT IGNORE INTO user_profiles (user_id) VALUES (%s)", (user_id,))
+        today = datetime.now().strftime("%Y-%m-%d")
+        yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+        cursor.execute("SELECT current_streak, last_played_date FROM user_profiles WHERE user_id=%s", (user_id,))
+        row = cursor.fetchone()
+        if row:
+            streak, last_date = row[0], row[1]
+            last_date_str = str(last_date) if last_date else None
+            if last_date_str == yesterday:
+                cursor.execute("UPDATE user_profiles SET current_streak = current_streak + 1, last_played_date = %s WHERE user_id=%s", (today, user_id))
+            elif last_date_str != today:
+                cursor.execute("UPDATE user_profiles SET current_streak = 1, last_played_date = %s WHERE user_id=%s", (today, user_id))
+        else:
             cursor.execute("UPDATE user_profiles SET current_streak = 1, last_played_date = %s WHERE user_id=%s", (today, user_id))
-    else:
-        cursor.execute("UPDATE user_profiles SET current_streak = 1, last_played_date = %s WHERE user_id=%s", (today, user_id))
+    except Exception:
+        pass
     conn.close()
-
+    
 def claim_daily_gacha(user_id: int, reward_amount: int):
     conn = get_connection()
     cursor = conn.cursor()
@@ -241,29 +240,26 @@ def claim_daily_gacha(user_id: int, reward_amount: int):
     cursor.execute("UPDATE user_profiles SET wallet_balance = wallet_balance + %s, gacha_claimed_date = %s WHERE user_id=%s", (reward_amount, today, user_id))
     cursor.execute("INSERT INTO wallet_history (user_id, amount, reason) VALUES (%s, %s, %s)", (user_id, reward_amount, "สุ่มกาชาประจำวัน"))
     conn.close()
-
+    
 def get_admin_dashboard_data():
     conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute("ALTER TABLE users ADD COLUMN is_deleted INTEGER DEFAULT 0")
-    except pymysql.err.OperationalError:
+    except Exception:
         pass
-    except pymysql.err.OperationalError:
-        pass
-
     cursor.execute('''
-        SELECT 
-            u.id, 
-            u.name, 
-            COALESCE(p.wallet_balance, 0) as wallet_balance, 
-            COALESCE(p.current_streak, 0) as current_streak,
-            (SELECT COUNT(*) FROM progress WHERE user_id = u.id) as total_interactions,
-            (SELECT AVG(score) FROM progress WHERE user_id = u.id) as avg_score,
-            u.is_deleted
-        FROM users u
-        LEFT JOIN user_profiles p ON u.id = p.user_id
-        ORDER BY u.id DESC
+    SELECT 
+        u.id, 
+        u.name, 
+        COALESCE(p.wallet_balance, 0) as wallet_balance, 
+        COALESCE(p.current_streak, 0) as current_streak,
+        (SELECT COUNT(*) FROM progress WHERE user_id = u.id) as total_interactions,
+        (SELECT AVG(score) FROM progress WHERE user_id = u.id) as avg_score,
+        u.is_deleted
+    FROM users u
+    LEFT JOIN user_profiles p ON u.id = p.user_id
+    ORDER BY u.id DESC
     ''')
     users = []
     for row in cursor.fetchall():
@@ -284,9 +280,7 @@ def delete_user(user_id: int):
     cursor = conn.cursor()
     try:
         cursor.execute("ALTER TABLE users ADD COLUMN is_deleted INTEGER DEFAULT 0")
-    except pymysql.err.OperationalError:
-        pass
-    except pymysql.err.OperationalError:
+    except Exception:
         pass
     cursor.execute("UPDATE users SET is_deleted = 1 WHERE id=%s", (user_id,))
     conn.close()
@@ -367,15 +361,13 @@ def _init_vocab_table():
     conn.close()
 
 def add_vocabulary(user_id: int, word: str, pos: str, meaning: str):
-    try:
     _init_vocab_table()
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("INSERT INTO user_vocabulary (user_id, word, part_of_speech, meaning) VALUES (%s, %s, %s, %s)", 
-                       (user_id, word, pos, meaning))
+        cursor.execute("INSERT INTO user_vocabulary (user_id, word, part_of_speech, meaning) VALUES (%s, %s, %s, %s)", (user_id, word, pos, meaning))
         success = True
-    except pymysql.err.IntegrityError:
+    except Exception:
         success = False
     conn.close()
     return success
