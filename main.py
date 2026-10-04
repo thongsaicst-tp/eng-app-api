@@ -22,6 +22,12 @@ app.add_middleware(
     allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
 )
 
+# ─── Health / Keep-Alive endpoint (UptimeRobot ping ทุก 14 นาที) ───────────────
+@app.get("/ping")
+def ping():
+    return {"status": "ok", "message": "pong"}
+
+
 COACH_PERSONAS = {
     "alex": {"name": "Alex", "style": "casual, fun, encouraging buddy. Short sentences. Use emojis."},
     "emma": {"name": "Emma", "style": "professional, structured, precise teacher."},
@@ -246,10 +252,9 @@ async def assess_with_groq(audio_bytes: bytes, coach_id: str, level: str, topic:
     prompt = build_prompt(transcript, coach_id, level, topic, history)
     chat = client.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
-        model="openai/gpt-oss-20b",
+        model="qwen/qwen3.8-27b",
         temperature=0.7,
-        max_tokens=4096,
-        reasoning_effort="low",  # gpt-oss เป็นโมเดลคิดก่อนตอบ ถ้าไม่จำกัด มันคิดจนหมดโควต้า token แล้วตอบกลับว่างเปล่า
+        max_tokens=1024,
     )
     return chat.choices[0].message.content
 
