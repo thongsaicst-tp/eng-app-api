@@ -254,7 +254,7 @@ async def assess_with_groq(audio_bytes: bytes, coach_id: str, level: str, topic:
         messages=[{"role": "user", "content": prompt}],
         model="qwen/qwen3.8-27b",
         temperature=0.7,
-        max_tokens=1024,
+        max_tokens=800,  # qwen3.8-27b OTPM limit = 1000, ต้องต่ำกว่านี้
     )
     return chat.choices[0].message.content
 
