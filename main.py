@@ -193,7 +193,7 @@ REPLY: [natural English reply + ONE follow-up question about {topic}]"""
     for attempt in range(3):
         try:
             response = client.models.generate_content(
-                model="gemini-3.8-flash",
+                model="gemini-2.5-flash",
                 contents=[
                     types.Part(inline_data=types.Blob(mime_type="audio/mp4", data=audio_b64)),
                     prompt
@@ -242,15 +242,15 @@ async def assess_with_groq(audio_bytes: bytes, coach_id: str, level: str, topic:
         })
 
     # Step 2: Feedback with GPT OSS 20B via OpenAI-compatible API
-    print("Groq: Getting feedback with openai/gpt-oss-20b...")
+    print("Groq: Getting feedback with Llama 3...")
     prompt = build_prompt(transcript, coach_id, level, topic, history)
-    from openai import OpenAI as OpenAIClient
-    oa_client = OpenAIClient(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
-    chat = oa_client.responses.create(
-        input=prompt,
-        model="openai/gpt-oss-20b",
+    chat = client.chat.completions.create(
+        messages=[{"role": "user", "content": prompt}],
+        model="llama-3.1-8b-instant",
+        temperature=0.7,
+        max_tokens=1024,
     )
-    return chat.output_text
+    return chat.choices[0].message.content
 
 # ─── PROVIDER 3: Ollama (fully offline) ──────────────────────────────────────
 async def assess_with_ollama(audio_bytes: bytes, coach_id: str, level: str, topic: str, history: list, file_path: str):
@@ -368,12 +368,10 @@ def list_users():
 
 @app.get("/api/v1/dashboard/{user_id}")
 def get_dashboard(user_id: int):
-    stats = database.get_user_dashboard(user_id)
-    today_stats = database.get_today_dashboard(user_id)
-    profile = database.get_user_profile(user_id)
-    wallet_history = database.get_wallet_history(user_id)
-    learning_history = database.get_learning_history(user_id)
-    return {"status": "success", "user_id": user_id, "stats": stats, "today_stats": today_stats, "profile": profile, "wallet_history": wallet_history, "learning_history": learning_history}
+    full_data = database.get_full_dashboard(user_id)
+    full_data["status"] = "success"
+    full_data["user_id"] = user_id
+    return full_data
 
 @app.post("/api/v1/dashboard/reset/{user_id}")
 def reset_dashboard(user_id: int):

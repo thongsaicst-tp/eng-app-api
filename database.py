@@ -519,3 +519,84 @@ def log_api_call():
     cursor = conn.cursor()
     cursor.execute("INSERT INTO api_logs (called_at) VALUES (CURRENT_TIMESTAMP)")
     conn.close()
+
+def get_full_dashboard(user_id: int):
+    from datetime import datetime
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        # 1. user_dashboard
+        cursor.execute("SELECT COUNT(*), AVG(score), SUM(stars) FROM progress WHERE user_id = %s", (user_id,))
+        row1 = cursor.fetchone()
+        stats = {
+            "total_interactions": row1[0] or 0,
+            "average_score": round(row1[1] or 0, 1) if row1[1] else 0,
+            "total_stars": row1[2] or 0
+        }
+        
+        # 2. today_dashboard
+        cursor.execute("SELECT COUNT(*), AVG(score), SUM(stars) FROM progress WHERE user_id = %s AND DATE(created_at) = %s", (user_id, today))
+        row2 = cursor.fetchone()
+        today_stats = {
+            "interactions": row2[0] or 0,
+            "average_score": round(row2[1] or 0, 1) if row2[1] else 0,
+            "total_stars": int(row2[2] or 0)
+        }
+        
+        # 3. user_profile
+        cursor.execute("SELECT wallet_balance, current_streak, last_played_date, gacha_claimed_date, lost_streak FROM user_profiles WHERE user_id = %s", (user_id,))
+        row3 = cursor.fetchone()
+        if row3:
+            profile = {
+                "wallet_balance": row3[0],
+                "current_streak": row3[1],
+                "last_played_date": str(row3[2]) if row3[2] else None,
+                "gacha_claimed_today": str(row3[3]) == today if row3[3] else False,
+                "lost_streak": row3[4] or 0
+            }
+        else:
+            profile = {
+                "wallet_balance": 0, "current_streak": 0, "last_played_date": None,
+                "gacha_claimed_today": False, "lost_streak": 0
+            }
+            
+        # 4. wallet_history
+        cursor.execute("SELECT amount, reason, created_at FROM wallet_history WHERE user_id=%s ORDER BY id DESC LIMIT 20", (user_id,))
+        wallet_history = [{"amount": r[0], "reason": r[1], "date": r[2].strftime('%Y-%m-%d %H:%M:%S') if r[2] else None} for r in cursor.fetchall()]
+        
+        # 5. learning_history
+        cursor.execute('''
+            SELECT 
+                DATE(created_at) as play_date, 
+                DATE_FORMAT(created_at, '%%H:00') as play_hour, 
+                COUNT(id) as interactions, 
+                AVG(score) as avg_score,
+                GROUP_CONCAT(DISTINCT topic) as topics
+            FROM progress 
+            WHERE user_id = %s 
+            GROUP BY play_date, play_hour
+            ORDER BY play_date DESC, play_hour DESC
+            LIMIT 50
+        ''', (user_id,))
+        rows5 = cursor.fetchall()
+        learning_history = []
+        for r in rows5:
+            learning_history.append({
+                "date": r[0].strftime('%Y-%m-%d') if hasattr(r[0], 'strftime') else str(r[0]) if r[0] else None,
+                "hour": r[1],
+                "interactions": r[2],
+                "avg_score": round(r[3], 1) if r[3] else 0,
+                "topics": r[4]
+            })
+            
+        return {
+            "stats": stats,
+            "today_stats": today_stats,
+            "profile": profile,
+            "wallet_history": wallet_history,
+            "learning_history": learning_history
+        }
+    finally:
+        conn.close()
