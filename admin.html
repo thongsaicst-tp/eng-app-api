@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parent Admin Dashboard - TS NEXUS AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white p-8 font-sans">
+    <div id="login-screen" class="max-w-sm mx-auto mt-20 bg-gray-800 p-8 rounded-xl shadow-lg border border-gray-700">
+        <h1 class="text-2xl font-bold mb-6 text-center text-teal-400">🔒 Parent Login</h1>
+        <input type="password" id="admin-pass" placeholder="Enter PIN (9999)" class="w-full p-3 rounded bg-gray-700 text-white border border-gray-600 mb-4 focus:outline-none focus:border-teal-400 text-center text-xl tracking-widest">
+        <button onclick="login()" class="w-full bg-teal-500 hover:bg-teal-400 text-gray-900 font-bold py-3 rounded">Login</button>
+    </div>
+
+    <div id="dashboard-screen" class="hidden max-w-5xl mx-auto">
+        <div class="flex justify-between items-center mb-8 border-b border-gray-700 pb-4">
+            <h1 class="text-3xl font-bold text-teal-400">🛠️ แผงควบคุมผู้ปกครอง (Parent Dashboard)</h1>
+            <div class="flex items-center space-x-3">
+                <label class="flex items-center cursor-pointer mr-4">
+                    <span class="mr-2 text-sm text-gray-300">ล็อกการสมัครใหม่ (ป้องกันปั๊มไอดี)</span>
+                    <input type="checkbox" id="lock-reg-toggle" onchange="toggleRegistration()" class="w-5 h-5 accent-teal-500">
+                </label>
+                <button onclick="changePin()" class="bg-blue-500 hover:bg-blue-400 text-white px-4 py-2 rounded">เปลี่ยนรหัสผ่าน</button>
+                <button onclick="logout()" class="bg-red-500 hover:bg-red-400 text-white px-4 py-2 rounded">ออกจากระบบ</button>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 rounded-xl shadow-lg overflow-hidden border border-gray-700">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-gray-700 text-gray-300 text-sm uppercase">
+                        <th class="p-4 border-b border-gray-600">ID</th>
+                        <th class="p-4 border-b border-gray-600">ชื่อนักเรียน</th>
+                        <th class="p-4 border-b border-gray-600 text-center">เงินในกระปุก 💰</th>
+                        <th class="p-4 border-b border-gray-600 text-center">Streak 🔥</th>
+                        <th class="p-4 border-b border-gray-600 text-center">จำนวนครั้งที่เรียน</th>
+                        <th class="p-4 border-b border-gray-600 text-center">คะแนนเฉลี่ย</th>
+                        <th class="p-4 border-b border-gray-600 text-center">จัดการเงิน</th>
+                    </tr>
+                </thead>
+                <tbody id="user-table">
+                    <!-- Data injected via JS -->
+                </tbody>
+            </table>
+        </div>
+
+        <div class="mt-12 mb-4 flex justify-between items-center border-b border-gray-700 pb-4">
+            <h2 class="text-2xl font-bold text-teal-400">🎟️ จัดการรหัสเชิญ (Invite Codes)</h2>
+            <button onclick="generateInvite()" class="bg-indigo-500 hover:bg-indigo-400 text-white px-4 py-2 rounded font-bold">+ สร้างรหัสเชิญใหม่</button>
+        </div>
+        <div class="bg-gray-800 rounded-xl shadow-lg overflow-hidden border border-gray-700 mb-10">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-gray-700 text-gray-300 text-sm uppercase">
+                        <th class="p-4 border-b border-gray-600">รหัสเชิญ (Code)</th>
+                        <th class="p-4 border-b border-gray-600">สถานะ</th>
+                        <th class="p-4 border-b border-gray-600">ถูกใช้โดย</th>
+                        <th class="p-4 border-b border-gray-600">วันที่สร้าง</th>
+                    </tr>
+                </thead>
+                <tbody id="invite-table">
+                    <!-- Data injected via JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <script>
+        const API_BASE = ''; // Same origin
+        let currentPin = '';
+
+        async function login() {
+            const pass = document.getElementById('admin-pass').value;
+            if (!pass) return;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/admin/verify`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pin: pass })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    currentPin = pass;
+                    document.getElementById('login-screen').classList.add('hidden');
+                    document.getElementById('dashboard-screen').classList.remove('hidden');
+                    loadDashboard();
+                    loadSettings();
+                    loadInvites();
+                } else {
+                    alert(data.message || 'รหัสผ่านไม่ถูกต้อง!');
+                }
+            } catch (e) {
+                alert('Connection error');
+            }
+        }
+
+        async function changePin() {
+            const newPin = prompt('กรุณาตั้งรหัสผ่าน PIN ใหม่ (ตัวเลข 4 หลัก):');
+            if (!newPin || newPin.trim() === '') return;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/admin/change_pin`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ old_pin: currentPin, new_pin: newPin })
+                });
+                const data = await res.json();
+                alert(data.message);
+                if (data.status === 'success') {
+                    currentPin = newPin;
+                }
+            } catch (e) {
+                alert('Connection error');
+            }
+        }
+
+        async function loadSettings() {
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/admin/settings`);
+                const data = await res.json();
+                document.getElementById('lock-reg-toggle').checked = !data.allow_registration;
+            } catch (e) {}
+        }
+
+        async function toggleRegistration() {
+            const locked = document.getElementById('lock-reg-toggle').checked;
+            try {
+                await fetch(`${API_BASE}/api/v1/admin/settings`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ allow_registration: !locked })
+                });
+            } catch (e) {
+                alert('Connection error');
+            }
+        }
+
+        function logout() {
+            currentPin = '';
+            document.getElementById('admin-pass').value = '';
+            document.getElementById('login-screen').classList.remove('hidden');
+            document.getElementById('dashboard-screen').classList.add('hidden');
+        }
+
+        async function loadDashboard() {
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/admin/dashboard`);
+                const data = await res.json();
+                const tbody = document.getElementById('user-table');
+                tbody.innerHTML = '';
+
+                data.users.forEach(u => {
+                    const tr = document.createElement('tr');
+                    if (u.is_deleted) {
+                        tr.className = 'border-b border-gray-700 bg-gray-800 opacity-60';
+                        tr.innerHTML = `
+                            <td class="p-4 line-through">${u.id}</td>
+                            <td class="p-4 font-bold text-lg line-through text-gray-500">${u.name} (ลบแล้ว)</td>
+                            <td class="p-4 text-center text-gray-500 font-bold text-xl">${u.wallet_balance} บ.</td>
+                            <td class="p-4 text-center text-gray-500 font-bold">${u.current_streak} วัน</td>
+                            <td class="p-4 text-center text-gray-600">${u.total_interactions}</td>
+                            <td class="p-4 text-center text-gray-600">${u.avg_score}</td>
+                            <td class="p-4 text-center whitespace-nowrap">
+                                <button onclick="restoreUser(${u.id}, '${u.name}')" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-1 rounded mx-1 text-sm font-bold">♻️ กู้คืน</button>
+                            </td>
+                        `;
+                    } else {
+                        tr.className = 'border-b border-gray-700 hover:bg-gray-750 transition';
+                        tr.innerHTML = `
+                            <td class="p-4">${u.id}</td>
+                            <td class="p-4 font-bold text-lg">${u.name}</td>
+                            <td class="p-4 text-center text-teal-400 font-bold text-xl">${u.wallet_balance} บ.</td>
+                            <td class="p-4 text-center text-orange-400 font-bold">${u.current_streak} วัน</td>
+                            <td class="p-4 text-center text-gray-300">${u.total_interactions}</td>
+                            <td class="p-4 text-center text-gray-300">${u.avg_score}</td>
+                            <td class="p-4 text-center whitespace-nowrap">
+                                <button onclick="adjustMoney(${u.id}, '${u.name}', 10)" class="bg-green-500 hover:bg-green-400 text-white px-2 py-1 rounded mx-1 text-sm">+10 บ.</button>
+                                <button onclick="adjustMoney(${u.id}, '${u.name}', -10)" class="bg-yellow-600 hover:bg-yellow-500 text-white px-2 py-1 rounded mx-1 text-sm">-10 บ.</button>
+                                <button onclick="deleteUser(${u.id}, '${u.name}')" class="bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded mx-1 text-sm">🗑️ ลบ</button>
+                            </td>
+                        `;
+                    }
+                    tbody.appendChild(tr);
+                });
+            } catch (e) {
+                alert('โหลดข้อมูลล้มเหลว');
+            }
+        }
+
+        async function adjustMoney(userId, name, amount) {
+            const reason = prompt(`กำลังปรับเงินให้ ${name} จำนวน ${amount > 0 ? '+'+amount : amount} บาท\nโปรดระบุเหตุผล (ถ้ามี):`, amount > 0 ? 'รางวัลพิเศษจากผู้ปกครอง' : 'หักเงิน (ผู้ปกครองจัดการ)');
+            if (reason === null) return;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/admin/wallet/adjust`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: userId, amount: amount, reason: reason })
+                });
+                const data = await res.json();
+                if(data.status === 'success') {
+                    loadDashboard();
+                } else {
+                    alert(data.message);
+                }
+            } catch (e) {
+                alert('เกิดข้อผิดพลาดในการปรับเงิน');
+            }
+        }
+
+        async function deleteUser(userId, name) {
+            if (!confirm(`ยืนยันการลบชื่อ "${name}" ถาวรหรือไม่?\n*ข้อมูลเงินในกระปุกและประวัติทั้งหมดจะถูกซ่อนไว้!*`)) return;
+            
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/admin/user/${userId}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    loadDashboard();
+                } else {
+                    alert(data.message);
+                }
+            } catch (e) {
+                alert('เกิดข้อผิดพลาดในการลบบัญชี');
+            }
+        }
+
+        async function restoreUser(userId, name) {
+            if (!confirm(`ต้องการกู้คืนบัญชี "${name}" กลับมาใช่หรือไม่?`)) return;
+            
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/admin/user/${userId}/restore`, { method: 'POST' });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    loadDashboard();
+                } else {
+                    alert(data.message);
+                }
+            } catch (e) {
+                alert('เกิดข้อผิดพลาดในการกู้คืนบัญชี');
+            }
+        }
+
+        async function loadInvites() {
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/admin/invites`);
+                const data = await res.json();
+                const tbody = document.getElementById('invite-table');
+                tbody.innerHTML = '';
+                data.invites.forEach(inv => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'border-b border-gray-700 hover:bg-gray-750';
+                    tr.innerHTML = `
+                        <td class="p-4 font-mono font-bold text-lg text-indigo-400">${inv.code}</td>
+                        <td class="p-4">${inv.is_used ? '<span class="text-red-400 font-bold">ใช้งานแล้ว</span>' : '<span class="text-green-400 font-bold">ยังไม่ถูกใช้</span>'}</td>
+                        <td class="p-4 text-gray-400">${inv.used_by || '-'}</td>
+                        <td class="p-4 text-gray-500">${inv.created_at}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (e) {}
+        }
+
+        async function generateInvite() {
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/admin/invites/generate`, { method: 'POST' });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    loadInvites();
+                }
+            } catch (e) {
+                alert('เกิดข้อผิดพลาด');
+            }
+        }
+    </script>
+</body>
+</html>

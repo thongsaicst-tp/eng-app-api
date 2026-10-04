@@ -248,7 +248,8 @@ async def assess_with_groq(audio_bytes: bytes, coach_id: str, level: str, topic:
         messages=[{"role": "user", "content": prompt}],
         model="openai/gpt-oss-20b",
         temperature=0.7,
-        max_tokens=1024,
+        max_tokens=4096,
+        reasoning_effort="low",  # gpt-oss เป็นโมเดลคิดก่อนตอบ ถ้าไม่จำกัด มันคิดจนหมดโควต้า token แล้วตอบกลับว่างเปล่า
     )
     return chat.choices[0].message.content
 
@@ -517,7 +518,10 @@ async def assess_audio(
                         "emoji": vocab_parts[3].strip() if len(vocab_parts) >= 4 else "✨"
                     }
                     if user_id > 0:
-                        database.add_vocabulary(user_id, new_vocab["word"], new_vocab["pos"], new_vocab["meaning"])
+                        try:
+                            database.add_vocabulary(user_id, new_vocab["word"], new_vocab["pos"], new_vocab["meaning"])
+                        except Exception as e:
+                            print(f"Vocab DB Error: {e}")
             elif line_upper.startswith('OPTIONS:'):
                 opts = line.split(':', 1)[1].strip().split('|')
                 options = [o.strip() for o in opts if o.strip()]
@@ -564,6 +568,8 @@ async def assess_audio(
         }
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return {"status": "error", "message": str(e)}
 
 # ─── ADMIN DASHBOARD ───
@@ -571,7 +577,10 @@ from fastapi.responses import HTMLResponse
 
 @app.get("/admin", response_class=HTMLResponse)
 def get_admin_page():
-    with open("admin.html", "r", encoding="utf-8") as f:
+    admin_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "admin.html")
+    if not os.path.exists(admin_path):
+        return HTMLResponse("<h2>admin.html not found on server - please upload backend/admin.html to GitHub</h2>", status_code=404)
+    with open(admin_path, "r", encoding="utf-8") as f:
         return f.read()
 
 @app.get("/api/v1/admin/dashboard")
