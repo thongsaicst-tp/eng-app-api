@@ -462,6 +462,12 @@ async def assess_audio(
         import os
 
         content = await file.read()
+
+        # ─── Guard: ไฟล์เสียงต้องมีขนาดพอสมควร (> 5KB) ────────────────────
+        # ถ้าเล็กกว่านี้แปลว่า continuous mode อัดเสียงแต่ไม่มีใครพูด
+        if len(content) < 5000:
+            return {"status": "error", "message": "ไม่ได้ยินเสียง กรุณากดไมค์แล้วพูดให้ดังขึ้นครับ 🎙️"}
+
         unique_id = uuid.uuid4().hex
         file_path = os.path.join(AUDIO_DIR, f"rec_{unique_id}.m4a")
         with open(file_path, "wb") as f:
