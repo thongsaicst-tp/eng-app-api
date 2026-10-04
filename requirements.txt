@@ -17,3 +17,5 @@ pymysql
 edge-tts
 
 
+
+openai
