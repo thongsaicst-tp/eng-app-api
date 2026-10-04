@@ -670,7 +670,8 @@ VOICE_MAP = {
     'party': {'voice': 'en-US-AnaNeural', 'pitch': '+10Hz', 'rate': '+5%'}, # Party (8yo girl)
     'pokpong': {'voice': 'en-US-BrianNeural', 'pitch': '+35Hz', 'rate': '+10%'}, # Pokpong (12yo boy)
     'yenlly': {'voice': 'en-US-JennyNeural', 'pitch': '+0Hz', 'rate': '+0%'},
-    'ko': {'voice': 'en-US-SteffanNeural', 'pitch': '+0Hz', 'rate': '+0%'}
+    'ko': {'voice': 'en-US-SteffanNeural', 'pitch': '+0Hz', 'rate': '+0%'},
+    'chit': {'voice': 'en-US-RogerNeural', 'pitch': '-15Hz', 'rate': '+5%'} # 56yo strict but fun football coach
 }
 
 @app.get("/api/v1/tts")
