@@ -45,11 +45,11 @@ COACH_PERSONAS = {
 # ─── Prompt Builder ───────────────────────────────────────────────────────────
 def build_prompt(transcript: str, coach_id: str, level: str, topic: str, history: list) -> str:
     coach = COACH_PERSONAS.get(coach_id, COACH_PERSONAS["alex"])
-    conv = history[-4:]
+    conv = history[-2:]   # 2 ข้อความล่าสุดพอ = prompt สั้น = เร็วขึ้น
     history_text = ""
     if conv:
         history_text = "\nPrevious:\n" + "\n".join(
-            f"{'Student' if m['role']=='user' else coach['name']}: {m['text'][:100]}"
+            f"{'Student' if m['role']=='user' else coach['name']}: {m['text'][:60]}"
             for m in conv
         )
         
@@ -252,10 +252,9 @@ async def assess_with_groq(audio_bytes: bytes, coach_id: str, level: str, topic:
     prompt = build_prompt(transcript, coach_id, level, topic, history)
     chat = client.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
-        model="openai/gpt-oss-20b",
+        model="qwen/qwen3.8-27b",
         temperature=0.7,
-        max_tokens=2048,
-        reasoning_effort="low",
+        max_tokens=700,   # OTPM limit = 1000, keep under safely
     )
     return chat.choices[0].message.content
 
