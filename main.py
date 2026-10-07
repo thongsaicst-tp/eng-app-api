@@ -91,7 +91,8 @@ REPLY: [Say their score, then continue the game. Since this is an AUDIO-FIRST ap
 
         if topic == "Game_Pronunciation":
             return base_instructions + """\n\nGAME RULES: Pronunciation Master (Shadowing).
-- You are leading a 'Repeat After Me' game. 
+- You are leading a 'Repeat After Me' game.
+- IF THE STUDENT SAYS "I'm ready" OR "Start", you must welcome them and give the first sentence (e.g., "Welcome! Let's start. Repeat after me: I like apples!").
 - In your REPLY, you MUST give them ONE new simple English sentence to repeat. You MUST explicitly tell them to repeat it in ENGLISH ONLY (e.g., "Great job! Now, repeat after me: I like to play!"). DO NOT speak Thai in the REPLY section.
 - CRITICAL: You MUST put the EXACT English sentence you want them to repeat into the OPTIONS line (e.g. OPTIONS: I like to play!). This is required to show the text on screen."""
         
