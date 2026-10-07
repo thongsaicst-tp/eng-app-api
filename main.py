@@ -90,7 +90,10 @@ OPTIONS: [Choice 1] | [Choice 2] | [Choice 3]
 REPLY: [Say their score, then continue the game. Since this is an AUDIO-FIRST app for kids, you MUST SPEAK OUT LOUD the options in this REPLY so they can LISTEN and mimic you. Example: "What is it? You can say: Apple, or Banana."]"""
 
         if topic == "Game_Pronunciation":
-            return base_instructions + f"\n\nGAME RULES: Pronunciation Master (Shadowing).\n- Evaluate how well they repeated your last sentence. If it's the start, just say 'Great!'\n- In your REPLY, give them ONE new cool simple sentence to repeat. (e.g., พูดตามโค้ชนะ{polite_particle}: I love apples!)\n- CRITICAL: You MUST put the exact English sentence you want them to repeat into the OPTIONS tag (e.g. OPTIONS: I love apples!). This will render as a giant subtitle on their screen so they know what to say!"
+            return base_instructions + """\n\nGAME RULES: Pronunciation Master (Shadowing).
+- You are leading a 'Repeat After Me' game. 
+- In your REPLY, you MUST give them ONE new simple English sentence to repeat. You MUST explicitly tell them to repeat it in ENGLISH ONLY (e.g., "Great job! Now, repeat after me: I like to play!"). DO NOT speak Thai in the REPLY section.
+- CRITICAL: You MUST put the EXACT English sentence you want them to repeat into the OPTIONS line (e.g. OPTIONS: I like to play!). This is required to show the text on screen."""
         
         elif topic == "Game_WordChain":
             return base_instructions + "\n\nGAME RULES: Word Chain (Shiritori). The student's word MUST start with the last letter of your previous word. If they are correct, score high. If wrong or misspelled, score low and correct them. REPLY must contain YOUR new word that starts with the last letter of their word."
