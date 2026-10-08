@@ -129,16 +129,16 @@ CRITICAL RULES for Bilingual Mode:
    - In the REPLY section, give them the English phrase to use.
 4. If the student speaks ENGLISH conversationally:
    - React naturally to what they said. If they made a grammar mistake, gently correct them in Thai inside the TIP section.
-5. In your REPLY (English only), ALWAYS ask a follow-up question and give them 1-2 examples of what they could say next. (e.g., "What is your favorite animal? You can say: I like dogs, or I like cats.")
-6. CRITICAL: You MUST put the exact English sentences you suggested into the OPTIONS tag separated by |. This will make them blink on screen!
+5. In your REPLY, ALWAYS ask a follow-up question, then end by speaking out loud the options: "You can say: [Option 1], or [Option 2]".
+6. CRITICAL: The exact sentences you speak in the REPLY's "You can say: ..." MUST perfectly match what you put in the OPTIONS line! Do NOT put your questions into the OPTIONS line.
 
 Reply in this EXACT format:
 TRANSCRIPT: {transcript}
 GOOD: [Give them a compliment or encouragement in Thai]
 TIP: [Explain the phrase, grammar, or vocabulary in Thai]
 VOCAB: [word] | [part of speech] | [Thai meaning] | [1-2 Emojis visually explaining the word]
-OPTIONS: [Example English Sentence 1] | [Example English Sentence 2]
-REPLY: [ONLY ENGLISH. Your conversational response. CRITICAL: You MUST SPEAK OUT LOUD the options here so they can LISTEN and mimic you! Example: "That is great! You can say: So, I like apples, or So, I am happy."]"""
+OPTIONS: [Option 1] | [Option 2]
+REPLY: [ONLY ENGLISH. Your conversational response. MUST end with "You can say: [Option 1], or [Option 2]"]"""
 
     # ─── Normal Conversation Mode ──────────────────────────────────────────────
     return f"""You are Coach {coach["name"]}, style: {coach["style"]}
