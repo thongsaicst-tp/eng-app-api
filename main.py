@@ -138,7 +138,7 @@ GOOD: [Give them a compliment or encouragement in Thai]
 TIP: [Explain the phrase, grammar, or vocabulary in Thai]
 VOCAB: [word] | [part of speech] | [Thai meaning] | [1-2 Emojis visually explaining the word]
 OPTIONS: [Example English Sentence 1] | [Example English Sentence 2]
-REPLY: [ONLY ENGLISH. Your conversational response + suggesting what they can say next.]"""
+REPLY: [ONLY ENGLISH. Your conversational response. CRITICAL: You MUST SPEAK OUT LOUD the options here so they can LISTEN and mimic you! Example: "That is great! You can say: So, I like apples, or So, I am happy."]"""
 
     # ─── Normal Conversation Mode ──────────────────────────────────────────────
     return f"""You are Coach {coach["name"]}, style: {coach["style"]}
