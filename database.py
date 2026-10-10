@@ -598,3 +598,66 @@ def get_full_dashboard(user_id: int):
         }
     finally:
         conn.close()
+
+def check_quota_and_log_if_allowed():
+    from datetime import datetime
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        cursor.execute("SELECT setting_value FROM settings WHERE setting_key = 'daily_quota'")
+        row = cursor.fetchone()
+        limit = int(row[0]) if row else 100
+        
+        cursor.execute("SELECT COUNT(*) FROM api_logs WHERE DATE(called_at) = %s", (today,))
+        row = cursor.fetchone()
+        used = row[0] if row else 0
+        
+        if used < limit:
+            cursor.execute("INSERT INTO api_logs (called_at) VALUES (CURRENT_TIMESTAMP)")
+            
+        return used, limit
+    finally:
+        conn.close()
+
+def save_interaction_data(user_id: int, topic: str, score: int, stars: str, new_vocab: dict, earned_money: int, reason: str):
+    from datetime import datetime, timedelta
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        # 1. Add Vocab
+        if new_vocab:
+            cursor.execute("SELECT id FROM vocabulary WHERE user_id = %s AND word = %s", (user_id, new_vocab['word']))
+            if not cursor.fetchone():
+                cursor.execute("INSERT INTO vocabulary (user_id, word, part_of_speech, meaning) VALUES (%s, %s, %s, %s)", 
+                              (user_id, new_vocab['word'], new_vocab['pos'], new_vocab['meaning']))
+        
+        # 2. Save Progress
+        cursor.execute("INSERT INTO progress (user_id, topic, score, stars) VALUES (%s, %s, %s, %s)", (user_id, topic, score, stars))
+        
+        # 3. Record Play for Streak
+        if score > 0:
+            cursor.execute("SELECT last_played_date, current_streak FROM user_profiles WHERE user_id = %s", (user_id,))
+            row = cursor.fetchone()
+            if row:
+                last_played = str(row[0]) if row[0] else None
+                current_streak = row[1] or 0
+                yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+                
+                if last_played == yesterday:
+                    cursor.execute("UPDATE user_profiles SET current_streak = current_streak + 1, last_played_date = %s WHERE user_id = %s", (today, user_id))
+                elif last_played != today:
+                    cursor.execute("UPDATE user_profiles SET current_streak = 1, last_played_date = %s WHERE user_id = %s", (today, user_id))
+            else:
+                cursor.execute("INSERT INTO user_profiles (user_id, current_streak, last_played_date) VALUES (%s, 1, %s) ON DUPLICATE KEY UPDATE current_streak = 1, last_played_date = %s", (user_id, today, today))
+        
+        # 4. Add Money
+        if earned_money > 0:
+            cursor.execute("UPDATE user_profiles SET wallet_balance = wallet_balance + %s WHERE user_id=%s", (earned_money, user_id))
+            cursor.execute("INSERT INTO wallet_history (user_id, amount, reason) VALUES (%s, %s, %s)", (user_id, earned_money, reason))
+            
+    finally:
+        conn.close()

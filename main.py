@@ -219,12 +219,14 @@ REPLY: [natural English reply + ONE follow-up question about {topic}]"""
 
 # ─── PROVIDER 2: Groq (Whisper STT + Llama LLM) ──────────────────────────────
 async def assess_with_groq(audio_bytes: bytes, coach_id: str, level: str, topic: str, history: list, file_path: str):
+    import time
+    t0 = time.time()
     from groq import Groq
 
     client = Groq(api_key=GROQ_API_KEY)
 
     # Step 1: Transcribe with Whisper Large v3 Turbo (เร็วมาก!)
-    print("Groq: Transcribing with Whisper Large v3 Turbo...")
+    print(f"[{time.time()-t0:.2f}s] Groq: Transcribing with Whisper Large v3 Turbo...")
     
     # ถ้าเป็นโหมด 2 ภาษา (Bilingual) ให้ลบ language="en" ออกเพื่อให้จับเสียงภาษาไทยได้
     whisper_kwargs = {
@@ -239,8 +241,8 @@ async def assess_with_groq(audio_bytes: bytes, coach_id: str, level: str, topic:
             file=(os.path.basename(file_path), f),
             **whisper_kwargs
         )
-    transcript = transcription.strip()
-    print(f"Groq transcript: {transcript}")
+    transcript = transcription.text.strip() if hasattr(transcription, 'text') else transcription.strip() if isinstance(transcription, str) else str(transcription).strip()
+    print(f"[{time.time()-t0:.2f}s] Groq transcript: {transcript}")
     
     # ─── Anti-Cheat Check ───
     if not transcript or len(transcript) < 2:
@@ -252,7 +254,7 @@ async def assess_with_groq(audio_bytes: bytes, coach_id: str, level: str, topic:
         })
 
     # Step 2: Feedback with GPT OSS 20B via OpenAI-compatible API
-    print("Groq: Getting feedback with Llama 3...")
+    print(f"[{time.time()-t0:.2f}s] Groq: Getting feedback with Qwen...")
     prompt = build_prompt(transcript, coach_id, level, topic, history)
     chat = client.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
@@ -260,6 +262,7 @@ async def assess_with_groq(audio_bytes: bytes, coach_id: str, level: str, topic:
         temperature=0.7,
         max_tokens=700,   # OTPM limit = 1000, keep under safely
     )
+    print(f"[{time.time()-t0:.2f}s] Groq: Feedback completed.")
     return chat.choices[0].message.content
 
 # ─── PROVIDER 3: Ollama (fully offline) ──────────────────────────────────────
@@ -455,10 +458,13 @@ async def assess_audio(
     history: str = Form("[]"),
     user_id: int = Form(0),  # เพิ่มการรับ user_id
 ):
+    import time
+    t_start = time.time()
+    print(f"--- NEW REQUEST STARTED ---")
     try:
-        # เช็คโควต้าก่อน
-        used_quota = database.get_daily_quota_usage()
-        daily_limit = int(database.get_setting('daily_quota', '100'))
+        # เช็คโควต้าและบันทึกในทีเดียวเพื่อลด Latency
+        used_quota, daily_limit = database.check_quota_and_log_if_allowed()
+        print(f"[{time.time()-t_start:.2f}s] DB Fast Quota Check completed.")
         if used_quota >= daily_limit:
             return {"status": "error", "message": f"Quota limit reached! You have used {used_quota}/{daily_limit} requests today.", "quota_used": used_quota, "quota_limit": daily_limit}
 
@@ -501,7 +507,7 @@ async def assess_audio(
             return json.loads(feedback)
 
         # ─── Log Quota if Valid ───
-        database.log_api_call()
+        # (Already logged in check_quota_and_log_if_allowed)
         current_used = used_quota + 1
 
         # ─── Extract Fields for UI ─────────────────────────────────────
@@ -532,41 +538,27 @@ async def assess_audio(
                         "meaning": vocab_parts[2].strip(),
                         "emoji": vocab_parts[3].strip() if len(vocab_parts) >= 4 else "✨"
                     }
-                    if user_id > 0:
-                        try:
-                            database.add_vocabulary(user_id, new_vocab["word"], new_vocab["pos"], new_vocab["meaning"])
-                        except Exception as e:
-                            print(f"Vocab DB Error: {e}")
+                    pass # vocab is saved below
             elif line_upper.startswith('OPTIONS:'):
                 opts = line.split(':', 1)[1].strip().split('|')
                 options = [o.strip() for o in opts if o.strip()]
 
         # ─── Save Progress to Database ─────────────────────────────────
         if user_id > 0:
-            # เก็บ Progress ทุก Interaction เพื่อให้นับจำนวนครั้งผ่านด่านได้เสมอ แม้ AI จะลืมให้คะแนน
             score_to_save = score if isinstance(score, int) else 0
-            database.save_progress(user_id, topic, score_to_save, stars)
-            # อัปเดต Streak ถ้าคะแนน > 0
-            if score_to_save > 0:
-                database.record_play_for_streak(user_id)
-            
-            # ระบบค่าแรงตามความยาก (Fair Exchange Rate ป้องกันเด็กลักไก่เล่นโหมดง่าย)
             star_count = stars.count('⭐')
             earned_money = 0
-            
-            if level == 'A1':
-                # โหมดง่ายสุด: ได้เงินแค่ 1 บาท ถ้าคะแนนเกิน 70 (ดาวไม่ช่วยเพิ่มเงิน)
-                if score_to_save >= 70:
-                    earned_money = 1
+            if level == 'A1' and score_to_save >= 70:
+                earned_money = 1
             elif level == 'B1':
-                # โหมดปานกลาง: 1 ดาว = 1 บาท
                 earned_money = star_count
             elif level == 'C1':
-                # โหมดยาก: 1 ดาว = 2 บาท (ให้กำลังใจเด็กที่กล้าเล่นท่ายาก)
                 earned_money = star_count * 2
 
-            if earned_money > 0:
-                database.add_money(user_id, earned_money)
+            try:
+                database.save_interaction_data(user_id, topic, score_to_save, stars, new_vocab, earned_money, f"รางวัล (Level: {level})")
+            except Exception as e:
+                print(f"DB Error saving interaction: {e}")
 
         return {
             "status": "success",
